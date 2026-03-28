@@ -1,12 +1,15 @@
+import {
+  TOPOLOGY_HOST_PROTOCOL_VERSION,
+  type ModeChangedMessage,
+  type TopologyHostAckMessage,
+  type TopologyHostErrorMessage,
+  type TopologyHostRejectMessage,
+  type TopologyHostSnapshotMessage
+} from "@srl-labs/clab-ui-core";
 import type {
-  TopologyHostAckMessage,
-  TopologyHostErrorMessage,
-  TopologyHostRejectMessage,
-  TopologyHostSnapshotMessage
-} from "@srl-labs/clab-ui-core/types/messages";
-import { TOPOLOGY_HOST_PROTOCOL_VERSION } from "@srl-labs/clab-ui-core/types/messages";
-import type {
+  SnapshotRequestOptions,
   TopologyCommand,
+  TopologyHostContext,
   TopologyHostEvent,
   TopologyHostResponse,
   TopologyHostTransport,
@@ -61,7 +64,7 @@ function isHostResponse(data: unknown): data is HostResponse {
   );
 }
 
-function isModeChangedMessage(data: unknown): data is TopologyHostEvent {
+function isModeChangedMessage(data: unknown): data is ModeChangedMessage {
   return isObject(data) && data.type === "topo-mode-changed";
 }
 
@@ -80,7 +83,7 @@ export class VsCodeTopologyHostTransport implements TopologyHostTransport {
     this.windowTarget.addEventListener("message", this.handleMessage as EventListener);
   }
 
-  async requestSnapshot(): Promise<TopologySnapshotState> {
+  async requestSnapshot(_options?: SnapshotRequestOptions): Promise<TopologySnapshotState> {
     return this.sendRequest<TopologySnapshotState>(
       {
         type: "topology-host:get-snapshot",
@@ -107,6 +110,10 @@ export class VsCodeTopologyHostTransport implements TopologyHostTransport {
     return () => {
       this.subscribers.delete(handler);
     };
+  }
+
+  setContext(_context: Partial<TopologyHostContext>): void {
+    // VS Code transport does not require client-side context injection.
   }
 
   dispose(): void {

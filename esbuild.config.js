@@ -121,7 +121,7 @@ async function build() {
       outfile: "dist/reactTopoViewerWebview.js"
     },
     {
-      entryPoints: ["packages/explorer/src/entry.tsx"],
+      entryPoints: ["packages/ui/src/explorer/entry.tsx"],
       outfile: "dist/containerlabExplorerView.js"
     },
     {
@@ -129,7 +129,7 @@ async function build() {
       outfile: "dist/welcomePageWebview.js"
     },
     {
-      entryPoints: ["packages/inspect/src/entry.tsx"],
+      entryPoints: ["packages/ui/src/inspect/entry.tsx"],
       outfile: "dist/inspectWebview.js"
     },
     {

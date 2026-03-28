@@ -1,49 +1,70 @@
 # containerlab-gui
 
-Standalone frontend package for containerlab webviews.
+Workspace for shared containerlab UI packages.
 
-## Commands
+## Active development flow
 
-- `npm run dev`: run pure frontend Vite dev app
+- `npm run dev`: run the standalone browser harness from `dev/`
 - `npm run build`: build publishable webview artifacts into `dist/`
-- `npm run typecheck`: run TypeScript checks
+- `npm run typecheck`: run TypeScript checks for `src/`, `dev/`, and `packages/`
 
-## Package outputs
+The active dev harness is `dev/`.
+
+## Package model
+
+The main published package is:
+
+- `@srl-labs/clab-ui`
+
+Compatibility wrapper packages in this repo:
+
+- `@srl-labs/clab-ui-core`
+- `@srl-labs/clab-ui-explorer`
+- `@srl-labs/clab-ui-inspect`
+- `@srl-labs/containerlab-gui`
+
+These wrappers are for internal/workspace compatibility and re-export canonical implementations from `@srl-labs/clab-ui`.
+
+Host adapter packages:
+
+- `@srl-labs/clab-adapter-vscode`
+- `@srl-labs/clab-adapter-api`
+- `@srl-labs/clab-adapter-memory`
+
+## Build outputs
 
 `dist/` contains:
 
-- Webview bundles (TopoViewer + explorer + welcome + inspect + node impairments + wireshark VNC)
+- webview bundles (TopoViewer + explorer + welcome + inspect + node impairments + wireshark VNC)
 - `reactTopoViewerStyles.css`
 - Monaco worker bundles
 - MapLibre CSP worker
 - `manifest.json` with logical asset IDs
 - `index.js` / `index.d.ts` helper exports (`getWebviewAssetManifest`, `resolveAssetPath`)
 
-## Dev mode
-
-The dev app runs fully in-browser with an in-memory topology host and `localStorage` persistence.
-No filesystem middleware or backend server is required.
-
 ## Publishing
 
-This package is published to GitHub Packages as `@srl-labs/containerlab-gui`.
+`@srl-labs/clab-ui` is published to GitHub Packages. See `PUBLISHING.md`.
 
-Release flow:
+## Host integration
 
-1. Update `package.json` version.
-2. Create and push a matching git tag (`v<version>`, for example `v0.0.1`).
-3. The `Publish Package` workflow publishes the package.
+The UI package is transport-driven:
 
-Notes:
+- configure transport with `setHostTransport(...)`
+- update context with `setHostContext(...)`
 
-- `prepack` runs `npm run build`, so `dist/` is generated automatically for the published tarball.
-- Tag and package versions must match or the publish workflow fails.
+Default behavior (no explicit transport) uses VS Code message transport when `window.vscode` is available.
 
-## Installing from GitHub Packages
+Example (HTTP API transport):
 
-Add this to `.npmrc` in consuming repos:
+```ts
+import { setHostContext, setHostTransport } from "@srl-labs/clab-ui/services";
+import { ApiTopologyHostTransport } from "@srl-labs/clab-adapter-api";
 
-```ini
-@srl-labs:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+setHostTransport(new ApiTopologyHostTransport({ baseUrl: "http://127.0.0.1:8080" }));
+setHostContext({
+  path: "labs/my-lab.clab.yml",
+  mode: "edit",
+  deploymentState: "undeployed"
+});
 ```

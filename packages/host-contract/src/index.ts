@@ -3,7 +3,9 @@ export type {
   LifecycleActionType,
   LifecycleResult,
   NodeRuntimeData,
+  SnapshotRequestOptions,
   TopologyCommand,
+  TopologyHostContext,
   TopologyHostEvent,
   TopologyHostResponse,
   TopologySnapshotState

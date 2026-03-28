@@ -2,7 +2,9 @@ import type {
   LifecycleAction,
   LifecycleResult,
   NodeRuntimeData,
+  SnapshotRequestOptions,
   TopologyCommand,
+  TopologyHostContext,
   TopologyHostEvent,
   TopologyHostResponse,
   TopologySnapshotState
@@ -15,11 +17,13 @@ export type Unsubscribe = () => void;
  * Implemented by each adapter package.
  */
 export interface TopologyHostTransport {
-  requestSnapshot(): Promise<TopologySnapshotState>;
+  requestSnapshot(options?: SnapshotRequestOptions): Promise<TopologySnapshotState>;
 
   dispatch(command: TopologyCommand, revision: number): Promise<TopologyHostResponse>;
 
   subscribe(handler: (event: TopologyHostEvent) => void): Unsubscribe;
+
+  setContext?(context: Partial<TopologyHostContext>): void;
 
   executeLifecycleAction?(action: LifecycleAction): Promise<LifecycleResult>;
 

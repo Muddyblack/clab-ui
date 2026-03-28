@@ -1,11 +1,11 @@
 import type {
+  DeploymentState,
   ModeChangedMessage,
   TopologyHostCommand,
   TopologyHostResponseMessage,
   TopologyHostSnapshotMessage,
   TopologySnapshot
-} from "@srl-labs/clab-ui-core/types/messages";
-import type { DeploymentState } from "@srl-labs/clab-ui-core/types/topology";
+} from "@srl-labs/clab-ui-core";
 
 export type TopologyCommand = TopologyHostCommand;
 export type TopologyHostResponse = TopologyHostResponseMessage;
@@ -13,6 +13,17 @@ export type TopologySnapshotState = TopologySnapshot;
 export type TopologyHostEvent = TopologyHostSnapshotMessage | TopologyHostResponseMessage | ModeChangedMessage;
 
 export type LifecycleActionType = "deploy" | "destroy" | "redeploy" | "save";
+
+export interface TopologyHostContext {
+  path?: string;
+  mode?: "edit" | "view";
+  deploymentState?: DeploymentState;
+  sessionId?: string;
+}
+
+export interface SnapshotRequestOptions {
+  externalChange?: boolean;
+}
 
 export interface LifecycleAction {
   action: LifecycleActionType;

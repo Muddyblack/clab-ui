@@ -2,14 +2,13 @@
   "name": "containerlab-gui-workspace",
   "version": "0.0.1",
   "private": true,
-  "description": "Workspace for shared containerlab UI packages and apps",
+  "description": "Workspace for shared containerlab UI packages",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24.0.0"
   },
   "workspaces": [
-    "packages/*",
-    "apps/*"
+    "packages/*"
   ],
   "scripts": {
     "dev": "vite --config dev/vite.config.ts",

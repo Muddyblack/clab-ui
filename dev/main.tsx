@@ -4,33 +4,34 @@ import { createRoot, type Root as ReactRoot } from "react-dom/client";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import { App } from "@webview/App";
-import type { CustomNodeTemplate } from "@srl-labs/clab-ui-core/types/editors";
-import type { CustomIconInfo } from "@srl-labs/clab-ui-core/types/icons";
+import type { CustomNodeTemplate, CustomIconInfo, SchemaData } from "@srl-labs/clab-ui-core";
 import "@webview/styles/global.css";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
-import { setHostContext } from "@webview/services/topologyHostClient";
+import { setHostContext, setHostTransport } from "@webview/services/topologyHostClient";
 import { refreshTopologySnapshot } from "@webview/services/topologyHostCommands";
 import { useGraphStore, useTopoViewerStore } from "@webview/stores";
 import { applyDevVars } from "@webview/theme/devTheme";
 import { vscodeTheme } from "@webview/theme/vscodeTheme";
-import { EXPORT_COMMANDS } from "@srl-labs/clab-ui-core/messages/extension";
-import { MSG_SVG_EXPORT_RESULT } from "@srl-labs/clab-ui-core/messages/webview";
+import {
+  EXPORT_COMMANDS,
+  MSG_SVG_EXPORT_RESULT,
+  parseSchemaData
+} from "@srl-labs/clab-ui-core";
 
 import { DevStateManager } from "./mock/DevState";
 import { DevSettingsOverlay } from "./components/DevSettingsOverlay";
 import { sampleCustomNodes, sampleCustomIcons } from "./mockData";
 
 import clabSchema from "../schema/clab.schema.json";
-import { parseSchemaData } from "@srl-labs/clab-ui-core/schema";
-import type { SchemaData } from "@srl-labs/clab-ui-core/schema";
 import {
   buildExplorerSnapshot,
   type ExplorerActionInvocation,
   type ExplorerSnapshotOptions,
   type ExplorerSnapshotProviders
 } from "@srl-labs/clab-ui-explorer";
+import { ApiTopologyHostTransport } from "@srl-labs/clab-adapter-api";
 import type {
   ExplorerIncomingMessage,
   ExplorerOutgoingMessage,
@@ -61,6 +62,7 @@ installInMemoryApi({
     window.dispatchEvent(new Event("dev-files-mutated"));
   }
 });
+setHostTransport(new ApiTopologyHostTransport());
 
 // Session Management
 

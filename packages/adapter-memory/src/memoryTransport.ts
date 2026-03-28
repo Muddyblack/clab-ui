@@ -1,13 +1,16 @@
-import { createEmptyAnnotations } from "@srl-labs/clab-ui-core/annotations/types";
-import { TopologyHostCore } from "@srl-labs/clab-ui-core/host/TopologyHostCore";
-import type { FileSystemAdapter, IOLogger } from "@srl-labs/clab-ui-core/io/types";
 import {
+  createEmptyAnnotations,
+  type DeploymentState,
+  type FileSystemAdapter,
+  type IOLogger,
+  TopologyHostCore,
   TOPOLOGY_HOST_PROTOCOL_VERSION,
   type TopologyHostSnapshotMessage
-} from "@srl-labs/clab-ui-core/types/messages";
-import type { DeploymentState } from "@srl-labs/clab-ui-core/types/topology";
+} from "@srl-labs/clab-ui-core";
 import type {
+  SnapshotRequestOptions,
   TopologyCommand,
+  TopologyHostContext,
   TopologyHostEvent,
   TopologyHostResponse,
   TopologyHostTransport,
@@ -130,6 +133,7 @@ export interface MemoryTopologyHostTransportOptions {
  * This is used by the standalone dev app and test harnesses.
  */
 export class MemoryTopologyHostTransport implements TopologyHostTransport {
+  private readonly yamlFilePath: string;
   private readonly internalFs?: InMemoryFileSystemAdapter;
   private readonly host: TopologyHostCore;
   private readonly subscribers = new Set<(event: TopologyHostEvent) => void>();
@@ -137,6 +141,7 @@ export class MemoryTopologyHostTransport implements TopologyHostTransport {
 
   constructor(options: MemoryTopologyHostTransportOptions = {}) {
     const yamlFilePath = normalizePath(options.yamlFilePath ?? DEFAULT_YAML_FILE_PATH);
+    this.yamlFilePath = yamlFilePath;
     let fs: FileSystemAdapter;
 
     if (options.fs) {
@@ -168,8 +173,12 @@ export class MemoryTopologyHostTransport implements TopologyHostTransport {
     });
   }
 
-  async requestSnapshot(): Promise<TopologySnapshotState> {
+  async requestSnapshot(options?: SnapshotRequestOptions): Promise<TopologySnapshotState> {
     this.assertNotDisposed();
+
+    if (options?.externalChange) {
+      return this.onExternalChange();
+    }
 
     const snapshot = await this.host.getSnapshot();
     this.publish({
@@ -210,6 +219,24 @@ export class MemoryTopologyHostTransport implements TopologyHostTransport {
     return () => {
       this.subscribers.delete(handler);
     };
+  }
+
+  setContext(context: Partial<TopologyHostContext>): void {
+    this.assertNotDisposed();
+
+    if (typeof context.path === "string" && context.path.trim().length > 0) {
+      const normalizedPath = normalizePath(context.path);
+      if (normalizedPath !== this.yamlFilePath) {
+        throw new Error(
+          `Memory transport is bound to ${this.yamlFilePath} and cannot switch to ${normalizedPath}`
+        );
+      }
+    }
+
+    this.updateContext({
+      mode: context.mode,
+      deploymentState: context.deploymentState
+    });
   }
 
   dispose(): void {

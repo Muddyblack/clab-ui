@@ -9,6 +9,10 @@
 
 The `publish-package.yml` workflow publishes `@srl-labs/clab-ui` to GitHub Packages.
 
+Wrapper packages in this workspace (`@srl-labs/clab-ui-core`, `@srl-labs/clab-ui-explorer`,
+`@srl-labs/clab-ui-inspect`, `@srl-labs/containerlab-gui`) are compatibility layers for local
+development and are not published as standalone deliverables in this flow.
+
 ## Local publish (manual)
 
 ```bash
@@ -32,3 +36,6 @@ To pin another version:
 node scripts/set-clab-package-source.mjs --source=github --version=<version>
 npm install
 ```
+
+Host adapters (`@srl-labs/clab-adapter-vscode`, `@srl-labs/clab-adapter-api`,
+`@srl-labs/clab-adapter-memory`) are workspace packages used for integration and testing.

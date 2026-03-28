@@ -1,14 +1,14 @@
 /**
- * TopologyHost client - dispatches commands and snapshot requests to the host.
+ * Topology host client facade.
  *
- * Supports:
- * - VS Code webview messaging
- * - Dev server HTTP endpoints
+ * The UI talks to an injected transport. A VS Code message transport is used
+ * as lazy default when `window.vscode` exists and is not a dev mock.
  */
 
 import type {
   TopologyHostCommand,
   TopologyHostResponseMessage,
+  TopologyHostSnapshotMessage,
   TopologySnapshot
 } from "../core/types/messages";
 import { TOPOLOGY_HOST_PROTOCOL_VERSION } from "../core/types/messages";
@@ -21,122 +21,284 @@ declare global {
   }
 }
 
-interface HostContext {
+export interface HostContext {
   path?: string;
   mode?: "edit" | "view";
   deploymentState?: DeploymentState;
   sessionId?: string;
 }
 
-interface PendingRequest {
-  resolve: (value: TopologyHostResponseMessage | TopologySnapshot) => void;
-  reject: (err: Error) => void;
-  expectedType: "snapshot" | "command";
+export interface SnapshotRequestOptions {
+  externalChange?: boolean;
 }
 
-const pending = new Map<string, PendingRequest>();
-let revision = 1;
-let hostContext: HostContext = {};
-let listenerStarted = false;
+export interface TopologyHostTransport {
+  requestSnapshot(options?: SnapshotRequestOptions): Promise<TopologySnapshot>;
+  dispatch(command: TopologyHostCommand, revision: number): Promise<TopologyHostResponseMessage>;
+  setContext?(context: Partial<HostContext>): void;
+  dispose?(): void;
+}
 
-function ensureListener(): void {
-  if (listenerStarted) return;
-  subscribeToWebviewMessages(
-    (event) => {
-      const data = event.data as { type?: string; requestId?: string } | undefined;
-      if (!data?.type || !data.requestId) return;
+type HostResponseMessage = Extract<
+  TopologyHostResponseMessage,
+  { type: "topology-host:ack" | "topology-host:reject" | "topology-host:error" }
+>;
 
-      const pendingRequest = pending.get(data.requestId);
-      if (!pendingRequest) return;
+type RequestKind = "snapshot" | "command";
 
-      if (data.type === "topology-host:snapshot") {
-        if (pendingRequest.expectedType !== "snapshot") {
-          pendingRequest.reject(new Error("Unexpected snapshot response"));
-          pending.delete(data.requestId);
-          return;
-        }
-        const snapshot = (data as { snapshot?: TopologySnapshot }).snapshot;
-        if (!snapshot) {
-          pendingRequest.reject(new Error("Snapshot message missing payload"));
-          pending.delete(data.requestId);
-          return;
-        }
-        pendingRequest.resolve(snapshot);
-        pending.delete(data.requestId);
+interface PendingRequest {
+  kind: RequestKind;
+  resolve: (value: TopologySnapshot | TopologyHostResponseMessage) => void;
+  reject: (error: Error) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
+interface VsCodeTransportOptions {
+  timeoutMs?: number;
+  vscodeApi?: { postMessage(data: unknown): void; __isDevMock__?: boolean };
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+function createRequestId(): string {
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSnapshotMessage(data: unknown): data is TopologyHostSnapshotMessage {
+  return isObject(data) && data.type === "topology-host:snapshot" && isObject(data.snapshot);
+}
+
+function isHostResponse(data: unknown): data is HostResponseMessage {
+  return (
+    isObject(data) &&
+    (data.type === "topology-host:ack" || data.type === "topology-host:reject" || data.type === "topology-host:error")
+  );
+}
+
+class VsCodeMessageTopologyHostTransport implements TopologyHostTransport {
+  private readonly timeoutMs: number;
+  private readonly vscodeApi?: { postMessage(data: unknown): void; __isDevMock__?: boolean };
+  private readonly pending = new Map<string, PendingRequest>();
+  private readonly unsubscribe: () => void;
+  private disposed = false;
+
+  constructor(options: VsCodeTransportOptions = {}) {
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.vscodeApi = options.vscodeApi ?? window.vscode;
+
+    this.unsubscribe = subscribeToWebviewMessages(
+      (event) => {
+        this.handleMessage(event.data);
+      },
+      (event) => {
+        const type = event.data?.type;
+        return (
+          type === "topology-host:snapshot" ||
+          type === "topology-host:ack" ||
+          type === "topology-host:reject" ||
+          type === "topology-host:error"
+        );
+      }
+    );
+  }
+
+  async requestSnapshot(_options: SnapshotRequestOptions = {}): Promise<TopologySnapshot> {
+    return this.sendRequest<TopologySnapshot>(
+      {
+        type: "topology-host:get-snapshot",
+        protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION
+      },
+      "snapshot"
+    );
+  }
+
+  async dispatch(command: TopologyHostCommand, revision: number): Promise<TopologyHostResponseMessage> {
+    return this.sendRequest<TopologyHostResponseMessage>(
+      {
+        type: "topology-host:command",
+        protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
+        baseRevision: revision,
+        command
+      },
+      "command"
+    );
+  }
+
+  setContext(_context: Partial<HostContext>): void {
+    // VS Code transport does not need client-side context injection.
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    this.unsubscribe();
+
+    for (const [requestId, request] of this.pending.entries()) {
+      clearTimeout(request.timeoutId);
+      request.reject(new Error(`Transport disposed while request ${requestId} was pending`));
+    }
+    this.pending.clear();
+  }
+
+  private sendRequest<T>(payload: Record<string, unknown>, kind: RequestKind): Promise<T> {
+    if (this.disposed) {
+      return Promise.reject(new Error("Transport is disposed"));
+    }
+    if (!this.vscodeApi || this.vscodeApi.__isDevMock__) {
+      return Promise.reject(new Error("VS Code API is unavailable for topology transport"));
+    }
+
+    const requestId = createRequestId();
+
+    return new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pending.delete(requestId);
+        reject(new Error(`${kind} request timed out after ${this.timeoutMs}ms`));
+      }, this.timeoutMs);
+
+      this.pending.set(requestId, {
+        kind,
+        resolve: resolve as PendingRequest["resolve"],
+        reject,
+        timeoutId
+      });
+
+      this.vscodeApi?.postMessage({ ...payload, requestId });
+    });
+  }
+
+  private handleMessage(data: unknown): void {
+    if (isSnapshotMessage(data)) {
+      const requestId = typeof data.requestId === "string" ? data.requestId : undefined;
+      if (!requestId) {
         return;
       }
 
-      if (
-        data.type === "topology-host:ack" ||
-        data.type === "topology-host:reject" ||
-        data.type === "topology-host:error"
-      ) {
-        if (pendingRequest.expectedType !== "command") {
-          pendingRequest.reject(new Error("Unexpected command response"));
-          pending.delete(data.requestId);
-          return;
-        }
-        pendingRequest.resolve(data as TopologyHostResponseMessage);
-        pending.delete(data.requestId);
+      const pending = this.pending.get(requestId);
+      if (!pending) {
+        return;
       }
-    },
-    (event) => {
-      const type = event.data?.type;
-      return (
-        type === "topology-host:snapshot" ||
-        type === "topology-host:ack" ||
-        type === "topology-host:reject" ||
-        type === "topology-host:error"
-      );
+
+      clearTimeout(pending.timeoutId);
+      this.pending.delete(requestId);
+
+      if (pending.kind !== "snapshot") {
+        pending.reject(new Error("Received snapshot response for non-snapshot request"));
+        return;
+      }
+
+      pending.resolve(data.snapshot);
+      return;
     }
-  );
-  listenerStarted = true;
-}
 
-function isVsCode(): boolean {
-  if (typeof window === "undefined" || !window.vscode) {
-    return false;
+    if (!isHostResponse(data)) {
+      return;
+    }
+
+    const requestId = typeof data.requestId === "string" ? data.requestId : undefined;
+    if (!requestId) {
+      return;
+    }
+
+    const pending = this.pending.get(requestId);
+    if (!pending) {
+      return;
+    }
+
+    clearTimeout(pending.timeoutId);
+    this.pending.delete(requestId);
+
+    if (pending.kind !== "command") {
+      pending.reject(new Error("Received command response for non-command request"));
+      return;
+    }
+
+    pending.resolve(data);
   }
-  // In dev mode, window.vscode is a mock with __isDevMock__ marker
-  // We should use HTTP endpoints instead of VS Code messaging
-  const vscode = window.vscode as { __isDevMock__?: boolean };
-  return !vscode.__isDevMock__;
 }
 
-function buildApiUrl(path: string, sessionId?: string): string {
-  if (!sessionId) return path;
-  const delimiter = path.includes("?") ? "&" : "?";
-  return `${path}${delimiter}sessionId=${encodeURIComponent(sessionId)}`;
+let revision = 1;
+let hostContext: HostContext = {};
+let configuredTransport: TopologyHostTransport | null = null;
+let defaultTransport: TopologyHostTransport | null = null;
+
+function disposeTransport(transport: TopologyHostTransport | null): void {
+  if (!transport || typeof transport.dispose !== "function") {
+    return;
+  }
+  transport.dispose();
 }
 
-/** Send a message to VS Code with timeout handling */
-function sendVsCodeRequest<T>(
-  message: Record<string, unknown>,
-  expectedType: "snapshot" | "command",
-  timeoutMs = 30000
-): Promise<T> {
-  ensureListener();
-  const requestId = globalThis.crypto.randomUUID();
-  return new Promise((resolve, reject) => {
-    pending.set(requestId, {
-      resolve: resolve as PendingRequest["resolve"],
-      reject,
-      expectedType
-    });
-    window.vscode?.postMessage({ ...message, requestId });
-    setTimeout(() => {
-      if (pending.has(requestId)) {
-        pending.delete(requestId);
-        reject(
-          new Error(`${expectedType === "snapshot" ? "Snapshot" : "Command"} request timed out`)
-        );
-      }
-    }, timeoutMs);
-  });
+function createDefaultTransport(): TopologyHostTransport | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const vscodeApi = window.vscode;
+  if (!vscodeApi || vscodeApi.__isDevMock__) {
+    return null;
+  }
+
+  return new VsCodeMessageTopologyHostTransport({ vscodeApi });
+}
+
+function resolveTransport(): TopologyHostTransport {
+  if (configuredTransport) {
+    return configuredTransport;
+  }
+
+  if (!defaultTransport) {
+    defaultTransport = createDefaultTransport();
+    defaultTransport?.setContext?.(hostContext);
+  }
+
+  if (!defaultTransport) {
+    throw new Error(
+      "No topology host transport configured. Call setHostTransport(...) before using TopoViewer host commands."
+    );
+  }
+
+  return defaultTransport;
+}
+
+export function setHostTransport(transport: TopologyHostTransport | null): void {
+  if (configuredTransport && configuredTransport !== transport) {
+    disposeTransport(configuredTransport);
+  }
+  configuredTransport = transport;
+
+  if (defaultTransport) {
+    disposeTransport(defaultTransport);
+    defaultTransport = null;
+  }
+
+  configuredTransport?.setContext?.(hostContext);
+}
+
+export function resetHostTransport(): void {
+  if (configuredTransport) {
+    disposeTransport(configuredTransport);
+    configuredTransport = null;
+  }
+  if (defaultTransport) {
+    disposeTransport(defaultTransport);
+    defaultTransport = null;
+  }
 }
 
 export function setHostContext(update: Partial<HostContext>): void {
   hostContext = { ...hostContext, ...update };
+  configuredTransport?.setContext?.(hostContext);
+  defaultTransport?.setContext?.(hostContext);
 }
 
 export function getHostContext(): HostContext {
@@ -152,72 +314,13 @@ export function setHostRevision(nextRevision: number): void {
 }
 
 export async function requestSnapshot(
-  options: { externalChange?: boolean } = {}
+  options: SnapshotRequestOptions = {}
 ): Promise<TopologySnapshot> {
-  if (isVsCode()) {
-    return sendVsCodeRequest<TopologySnapshot>(
-      { type: "topology-host:get-snapshot", protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION },
-      "snapshot"
-    );
-  }
-
-  if (!hostContext.path) {
-    throw new Error("Dev host context missing topology path");
-  }
-
-  const response = await fetch(buildApiUrl("/api/topology/snapshot", hostContext.sessionId), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      path: hostContext.path,
-      mode: hostContext.mode,
-      deploymentState: hostContext.deploymentState,
-      externalChange: options.externalChange ?? false
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch snapshot: ${response.statusText}`);
-  }
-
-  const payload = (await response.json()) as { snapshot: TopologySnapshot };
-  return payload.snapshot;
+  return resolveTransport().requestSnapshot(options);
 }
 
 export async function dispatchTopologyCommand(
   command: TopologyHostCommand
 ): Promise<TopologyHostResponseMessage> {
-  if (isVsCode()) {
-    return sendVsCodeRequest<TopologyHostResponseMessage>(
-      {
-        type: "topology-host:command",
-        protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
-        baseRevision: revision,
-        command
-      },
-      "command"
-    );
-  }
-
-  if (!hostContext.path) {
-    throw new Error("Dev host context missing topology path");
-  }
-
-  const response = await fetch(buildApiUrl("/api/topology/command", hostContext.sessionId), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      path: hostContext.path,
-      baseRevision: revision,
-      command,
-      mode: hostContext.mode,
-      deploymentState: hostContext.deploymentState
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to send command: ${response.statusText}`);
-  }
-
-  return (await response.json()) as TopologyHostResponseMessage;
+  return resolveTransport().dispatch(command, revision);
 }

@@ -1,1 +1,1 @@
-export * from "./types";
+export * from "@srl-labs/clab-ui/inspect";

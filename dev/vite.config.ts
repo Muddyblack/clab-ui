@@ -22,6 +22,7 @@ export default defineConfig({
       "@srl-labs/clab-ui-explorer": path.resolve(__dirname, "../packages/explorer/src"),
       "@srl-labs/clab-ui-inspect": path.resolve(__dirname, "../packages/inspect/src"),
       "@srl-labs/clab-host-contract": path.resolve(__dirname, "../packages/host-contract/src"),
+      "@srl-labs/clab-adapter-api": path.resolve(__dirname, "../packages/adapter-api/src"),
       "@srl-labs/clab-adapter-memory": path.resolve(__dirname, "../packages/adapter-memory/src"),
       "@srl-labs/clab-adapter-vscode": path.resolve(__dirname, "../packages/adapter-vscode/src")
     },

@@ -1,11 +1,11 @@
 import { MemoryTopologyHostTransport } from "@srl-labs/clab-adapter-memory";
-import type { FileSystemAdapter } from "@srl-labs/clab-ui-core/io/types";
 import type {
+  DeploymentState,
+  FileSystemAdapter,
   TopologyHostCommand,
   TopologyHostResponseMessage,
   TopologySnapshot
-} from "@srl-labs/clab-ui-core/types/messages";
-import type { DeploymentState } from "@srl-labs/clab-ui-core/types/topology";
+} from "@srl-labs/clab-ui-core";
 
 import datacenterYaml from "../topologies-original/datacenter.clab.yml?raw";
 import datacenterAnnotations from "../topologies-original/datacenter.clab.yml.annotations.json?raw";
