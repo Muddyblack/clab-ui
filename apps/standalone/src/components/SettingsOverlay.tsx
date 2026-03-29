@@ -44,10 +44,13 @@ export function SettingsOverlay({
             top: 8,
             right: 8,
             zIndex: 9999,
-            bgcolor: "var(--vscode-button-background, #0e639c)",
-            color: "var(--vscode-button-foreground, #fff)",
+            bgcolor: "background.paper",
+            color: "action.active",
+            border: 1,
+            borderColor: "divider",
+            boxShadow: 2,
             "&:hover": {
-              bgcolor: "var(--vscode-button-hoverBackground, #1177bb)"
+              bgcolor: "action.hover"
             }
           }}
         >
@@ -65,13 +68,15 @@ export function SettingsOverlay({
             zIndex: 9999,
             p: 2,
             width: 280,
-            bgcolor: "var(--vscode-sideBar-background, #252526)",
-            color: "var(--vscode-editor-foreground, #d4d4d4)"
+            bgcolor: "background.paper",
+            color: "text.primary",
+            border: 1,
+            borderColor: "divider"
           }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
             <Typography variant="subtitle2">Settings</Typography>
-            <IconButton size="small" onClick={toggle}>
+            <IconButton size="small" onClick={toggle} sx={{ color: "action.active" }}>
               <CloseIcon fontSize="small" />
             </IconButton>
           </Box>
@@ -87,7 +92,7 @@ export function SettingsOverlay({
             </Typography>
             <Typography
               variant="caption"
-              sx={{ color: connected ? "#4caf50" : "#f44336" }}
+              sx={{ color: connected ? "success.main" : "error.main" }}
             >
               {connected ? "Connected" : "Disconnected"}
             </Typography>

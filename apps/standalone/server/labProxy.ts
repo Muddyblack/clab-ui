@@ -10,7 +10,9 @@ interface LabActionBody {
   labName: string;
 }
 
-export function registerLabProxy(app: FastifyInstance, client: ClabApiClient): void {
+type ClientResolver = (request: FastifyRequest) => ClabApiClient;
+
+export function registerLabProxy(app: FastifyInstance, getClient: ClientResolver): void {
   app.post<{ Body: LabActionBody }>(
     "/api/lab/deploy",
     async (request: FastifyRequest<{ Body: LabActionBody }>, reply: FastifyReply) => {
@@ -21,6 +23,7 @@ export function registerLabProxy(app: FastifyInstance, client: ClabApiClient): v
       if (!labName) return reply.status(400).send({ error: "Missing labName" });
 
       try {
+        const client = getClient(request);
         const result = await client.deployLab(token, labName);
         return reply.send({ success: true, result });
       } catch (error) {
@@ -40,6 +43,7 @@ export function registerLabProxy(app: FastifyInstance, client: ClabApiClient): v
       if (!labName) return reply.status(400).send({ error: "Missing labName" });
 
       try {
+        const client = getClient(request);
         await client.destroyLab(token, labName);
         return reply.send({ success: true });
       } catch (error) {
@@ -59,6 +63,7 @@ export function registerLabProxy(app: FastifyInstance, client: ClabApiClient): v
       if (!labName) return reply.status(400).send({ error: "Missing labName" });
 
       try {
+        const client = getClient(request);
         const result = await client.redeployLab(token, labName);
         return reply.send({ success: true, result });
       } catch (error) {

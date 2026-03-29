@@ -2,11 +2,13 @@
  * File listing proxy - returns topology files in the format the Explorer expects.
  */
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ClabApiClient } from "./clabApiClient.js";
 import { getTokenFromRequest } from "./middleware.js";
 
-export function registerFileProxy(app: FastifyInstance, client: ClabApiClient): void {
+type ClientResolver = (request: FastifyRequest) => ClabApiClient;
+
+export function registerFileProxy(app: FastifyInstance, getClient: ClientResolver): void {
   app.get("/files", async (request, reply) => {
     const token = getTokenFromRequest(request);
     if (!token) {
@@ -14,6 +16,7 @@ export function registerFileProxy(app: FastifyInstance, client: ClabApiClient): 
     }
 
     try {
+      const client = getClient(request);
       const topologies = await client.listTopologies(token);
       const labs = await client.listLabs(token);
 

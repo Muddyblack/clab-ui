@@ -48,6 +48,10 @@ export class ClabApiClient {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
   }
 
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   async login(username: string, password: string): Promise<LoginResponse> {
     const res = await fetch(`${this.baseUrl}/login`, {
       method: "POST",

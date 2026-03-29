@@ -148,7 +148,7 @@ async function getOrCreateHost(
 ): Promise<TopologyHostCore> {
   const labName = extractLabName(filePath);
   const normalizedPath = normalizeCachePath(filePath);
-  const cacheKey = `${token}:${labName}`;
+  const cacheKey = `${client.getBaseUrl()}:${token}:${labName}`;
 
   const cached = hostCache.get(cacheKey);
   if (cached) {
@@ -182,7 +182,9 @@ async function getOrCreateHost(
   return host;
 }
 
-export function registerTopologyProxy(app: FastifyInstance, client: ClabApiClient): void {
+type ClientResolver = (request: FastifyRequest) => ClabApiClient;
+
+export function registerTopologyProxy(app: FastifyInstance, getClient: ClientResolver): void {
   app.post<{ Body: SnapshotRequest }>(
     "/api/topology/snapshot",
     async (request: FastifyRequest<{ Body: SnapshotRequest }>, reply: FastifyReply) => {
@@ -190,6 +192,7 @@ export function registerTopologyProxy(app: FastifyInstance, client: ClabApiClien
       if (!token) {
         return reply.status(401).send({ error: "Not authenticated" });
       }
+      const client = getClient(request);
 
       const body = request.body;
       if (!body.path) {
@@ -234,6 +237,7 @@ export function registerTopologyProxy(app: FastifyInstance, client: ClabApiClien
       if (!token) {
         return reply.status(401).send({ error: "Not authenticated" });
       }
+      const client = getClient(request);
 
       const body = request.body;
       if (!body.path || !body.command) {

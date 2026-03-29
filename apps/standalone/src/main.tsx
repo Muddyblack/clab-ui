@@ -7,8 +7,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot, type Root as ReactRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { ThemeProvider } from "@mui/material/styles";
-import CssBaseline from "@mui/material/CssBaseline";
 import { App } from "@webview/App";
 import "@webview/styles/global.css";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -17,7 +15,7 @@ import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { setHostContext } from "@webview/services/topologyHostClient";
 import { refreshTopologySnapshot } from "@webview/services/topologyHostCommands";
 import { applyDevVars } from "@webview/theme/devTheme";
-import { vscodeTheme } from "@webview/theme/vscodeTheme";
+import { MuiThemeProvider } from "@webview/theme";
 import { parseSchemaData } from "@srl-labs/clab-ui/core/schema";
 import { EXPORT_COMMANDS } from "@srl-labs/clab-ui/core/messages/extension";
 import { MSG_SVG_EXPORT_RESULT } from "@srl-labs/clab-ui/core/messages/webview";
@@ -847,7 +845,7 @@ function renderApp(): void {
 function StandaloneApp() {
   const { isAuthenticated, loading, logout, login, error } = useAuth();
   const connected = useLabStore((s) => s.connected);
-  const [apiUrl, setApiUrl] = useState("unknown");
+  const [apiUrl, setApiUrl] = useState("");
 
   // Start event stream when authenticated
   useEventStream(isAuthenticated);
@@ -875,22 +873,34 @@ function StandaloneApp() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setApiUrl("unknown");
-      return;
+  const refreshApiConfig = useCallback(async () => {
+    try {
+      const res = await fetch("/api/config", { credentials: "include" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { clabApiUrl?: string; defaultClabApiUrl?: string };
+      if (typeof data.clabApiUrl === "string" && data.clabApiUrl.length > 0) {
+        setApiUrl(data.clabApiUrl);
+        return;
+      }
+      if (typeof data.defaultClabApiUrl === "string" && data.defaultClabApiUrl.length > 0) {
+        setApiUrl(data.defaultClabApiUrl);
+      }
+    } catch {
+      // Keep current value if config endpoint is temporarily unavailable
     }
+  }, []);
 
-    fetch("/api/config", { credentials: "include" })
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = (await res.json()) as { clabApiUrl?: string };
-        if (typeof data.clabApiUrl === "string" && data.clabApiUrl.length > 0) {
-          setApiUrl(data.clabApiUrl);
-        }
-      })
-      .catch(() => {});
-  }, [isAuthenticated]);
+  useEffect(() => {
+    void refreshApiConfig();
+  }, [isAuthenticated, refreshApiConfig]);
+
+  const handleLogin = useCallback(
+    async (username: string, password: string, selectedApiUrl: string) => {
+      await login(username, password, selectedApiUrl);
+      await refreshApiConfig();
+    },
+    [login, refreshApiConfig]
+  );
 
   const handleToggleTheme = useCallback(() => {
     document.documentElement.classList.toggle("light");
@@ -915,7 +925,16 @@ function StandaloneApp() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage error={error} onLogin={login} />;
+    return (
+      <MuiThemeProvider>
+        <LoginPage
+          error={error}
+          apiUrl={apiUrl}
+          onApiUrlChange={setApiUrl}
+          onLogin={handleLogin}
+        />
+      </MuiThemeProvider>
+    );
   }
 
   return (
@@ -926,7 +945,7 @@ function StandaloneApp() {
         onToggleTheme={handleToggleTheme}
         onLogout={handleLogout}
         connected={connected}
-        apiUrl={apiUrl}
+        apiUrl={apiUrl || "unknown"}
       />
     </>
   );
@@ -946,8 +965,7 @@ function SettingsOverlayMounted(props: {
   if (!overlayContainer) return null;
 
   return createPortal(
-    <ThemeProvider theme={vscodeTheme}>
-      <CssBaseline enableColorScheme />
+    <MuiThemeProvider>
       <SettingsOverlay
         currentTheme={props.currentTheme}
         onToggleTheme={props.onToggleTheme}
@@ -955,7 +973,7 @@ function SettingsOverlayMounted(props: {
         apiUrl={props.apiUrl}
         connected={props.connected}
       />
-    </ThemeProvider>,
+    </MuiThemeProvider>,
     overlayContainer
   );
 }

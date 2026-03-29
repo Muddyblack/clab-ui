@@ -23,7 +23,7 @@ export function useAuth() {
   }, [setAuthenticated, setUnauthenticated, setLoading]);
 
   const login = useCallback(
-    async (loginUsername: string, password: string) => {
+    async (loginUsername: string, password: string, apiUrl: string) => {
       setLoading(true);
       setError(null);
       try {
@@ -31,7 +31,7 @@ export function useAuth() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ username: loginUsername, password })
+          body: JSON.stringify({ username: loginUsername, password, apiUrl })
         });
 
         if (!res.ok) {

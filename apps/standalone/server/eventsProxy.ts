@@ -9,12 +9,16 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { ClabApiClient } from "./clabApiClient.js";
 import { getTokenFromRequest } from "./middleware.js";
 
-export function registerEventsProxy(app: FastifyInstance, client: ClabApiClient): void {
+type ClientResolver = (request: FastifyRequest) => ClabApiClient;
+
+export function registerEventsProxy(app: FastifyInstance, getClient: ClientResolver): void {
   app.get("/api/events", async (request: FastifyRequest, reply: FastifyReply) => {
     const token = getTokenFromRequest(request);
     if (!token) {
       return reply.status(401).send({ error: "Not authenticated" });
     }
+
+    const client = getClient(request);
 
     // Set SSE headers
     reply.raw.writeHead(200, {

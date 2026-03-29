@@ -6,9 +6,11 @@
  */
 
 import Fastify from "fastify";
+import type { FastifyRequest } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyCors from "@fastify/cors";
 import { ClabApiClient } from "./clabApiClient.js";
+import { getApiUrlFromRequest } from "./middleware.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerEventsProxy } from "./eventsProxy.js";
 import { registerTopologyProxy } from "./topologyProxy.js";
@@ -16,7 +18,7 @@ import { registerFileProxy } from "./fileProxy.js";
 import { registerLabProxy } from "./labProxy.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
-const CLAB_API_URL = process.env.CLAB_API_URL ?? "http://localhost:8080";
+const DEFAULT_CLAB_API_URL = process.env.CLAB_API_URL ?? "http://localhost:8080";
 const VITE_DEV_URL = process.env.VITE_DEV_URL ?? "http://localhost:5174";
 const IS_DEV = process.env.NODE_ENV !== "production";
 
@@ -30,17 +32,20 @@ async function start(): Promise<void> {
     credentials: true
   });
 
-  // API Client
-  const client = new ClabApiClient({ baseUrl: CLAB_API_URL });
+  const getClient = (request: FastifyRequest): ClabApiClient =>
+    new ClabApiClient({
+      baseUrl: getApiUrlFromRequest(request, DEFAULT_CLAB_API_URL)
+    });
 
   // Register routes
-  registerAuthRoutes(app, client);
-  registerEventsProxy(app, client);
-  registerTopologyProxy(app, client);
-  registerFileProxy(app, client);
-  registerLabProxy(app, client);
-  app.get("/api/config", async (_request, reply) => {
-    return reply.send({ clabApiUrl: CLAB_API_URL });
+  registerAuthRoutes(app, getClient, DEFAULT_CLAB_API_URL);
+  registerEventsProxy(app, getClient);
+  registerTopologyProxy(app, getClient);
+  registerFileProxy(app, getClient);
+  registerLabProxy(app, getClient);
+  app.get("/api/config", async (request, reply) => {
+    const clabApiUrl = getApiUrlFromRequest(request, DEFAULT_CLAB_API_URL);
+    return reply.send({ clabApiUrl, defaultClabApiUrl: DEFAULT_CLAB_API_URL });
   });
 
   if (IS_DEV) {
@@ -102,7 +107,7 @@ async function start(): Promise<void> {
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
   console.log(`Standalone app server running at http://localhost:${PORT}`);
-  console.log(`clab-api-server URL: ${CLAB_API_URL}`);
+  console.log(`default clab-api-server URL: ${DEFAULT_CLAB_API_URL}`);
   if (IS_DEV) {
     console.log(`Proxying frontend to: ${VITE_DEV_URL}`);
   }

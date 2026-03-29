@@ -5,6 +5,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 const COOKIE_NAME = "clab_token";
+const API_URL_COOKIE_NAME = "clab_api_url";
 
 /**
  * Extracts JWT token from httpOnly cookie.
@@ -33,6 +34,48 @@ export function setTokenCookie(reply: FastifyReply, token: string): void {
 export function clearTokenCookie(reply: FastifyReply): void {
   void reply.clearCookie(COOKIE_NAME, {
     path: "/"
+  });
+}
+
+/**
+ * Normalizes and validates API endpoint URL.
+ * Accepts host:port shorthand and normalizes to absolute HTTP(S) URL.
+ */
+export function normalizeApiUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+
+  const withProtocol = /^[a-z][a-z0-9+\-.]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves API endpoint from cookie, with configured default fallback.
+ */
+export function getApiUrlFromRequest(request: FastifyRequest, fallback: string): string {
+  const cookies = request.cookies as Record<string, string | undefined>;
+  const raw = cookies[API_URL_COOKIE_NAME];
+  const normalized = raw ? normalizeApiUrl(raw) : null;
+  return normalized ?? fallback;
+}
+
+/**
+ * Stores the selected API endpoint in a session cookie.
+ */
+export function setApiUrlCookie(reply: FastifyReply, apiUrl: string): void {
+  void reply.setCookie(API_URL_COOKIE_NAME, apiUrl, {
+    httpOnly: true,
+    sameSite: "strict",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30 // 30 days
   });
 }
 
