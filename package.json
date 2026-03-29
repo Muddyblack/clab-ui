@@ -8,7 +8,8 @@
     "node": ">=24.0.0"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/standalone"
   ],
   "scripts": {
     "dev": "vite --config dev/vite.config.ts",
@@ -24,7 +25,10 @@
     "test:e2e:debug": "playwright test --config test/e2e/playwright.config.ts --debug",
     "pack:preview": "npm pack --dry-run --workspace=@srl-labs/clab-ui",
     "publish:ui": "npm publish --workspace=@srl-labs/clab-ui",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "dev:standalone": "npm run dev --workspace=@srl-labs/clab-standalone",
+    "build:standalone": "npm run build --workspace=@srl-labs/clab-standalone",
+    "start:standalone": "npm run start --workspace=@srl-labs/clab-standalone"
   },
   "devDependencies": {
     "@emotion/react": "^11.14.0",
