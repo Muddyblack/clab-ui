@@ -13,10 +13,7 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
 import {
-  setHostContext,
-  type HostRuntimeContainer,
-  type HostRuntimeInterface,
-  type HostRuntimeInterfaceStats
+  setHostContext
 } from "@webview/services/topologyHostClient";
 import { refreshTopologySnapshot } from "@webview/services/topologyHostCommands";
 import { applyDevVars } from "@webview/theme/devTheme";
@@ -47,11 +44,12 @@ import type {
 import { useTopoViewerStore } from "@webview/stores/topoViewerStore";
 
 import clabSchema from "../../../schema/clab.schema.json";
-import { useLabStore, type ContainerState, type InterfaceState, type LabState } from "./stores/labStore";
+import { useLabStore, type LabState } from "./stores/labStore";
 import { useAuth } from "./hooks/useAuth";
 import { useEventStream } from "./hooks/useEventStream";
 import { LoginPage } from "./components/LoginPage";
 import { SettingsOverlay } from "./components/SettingsOverlay";
+import { getRuntimeContainersForLab, runtimeContainersEqual } from "./runtimeData";
 
 // Monaco workers setup
 const monacoGlobal = self as typeof self & {
@@ -827,143 +825,6 @@ function findLabState(
   return undefined;
 }
 
-function toFiniteNumber(value: string | number | undefined): number | undefined {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
-function toRuntimeInterfaceStats(iface: InterfaceState): HostRuntimeInterfaceStats | undefined {
-  const stats: HostRuntimeInterfaceStats = {};
-  const assign = (key: keyof HostRuntimeInterfaceStats, value: string | number | undefined): void => {
-    const parsed = toFiniteNumber(value);
-    if (parsed !== undefined) {
-      stats[key] = parsed;
-    }
-  };
-
-  assign("rxBps", iface.rxBps);
-  assign("txBps", iface.txBps);
-  assign("rxPps", iface.rxPps);
-  assign("txPps", iface.txPps);
-  assign("rxBytes", iface.rxBytes);
-  assign("txBytes", iface.txBytes);
-  assign("rxPackets", iface.rxPackets);
-  assign("txPackets", iface.txPackets);
-  assign("statsIntervalSeconds", iface.statsIntervalSeconds);
-
-  return Object.keys(stats).length > 0 ? stats : undefined;
-}
-
-function toRuntimeInterface(iface: InterfaceState): HostRuntimeInterface {
-  return {
-    name: iface.name,
-    alias: iface.alias,
-    mac: iface.mac,
-    mtu: toFiniteNumber(iface.mtu) ?? 0,
-    state: iface.state,
-    type: iface.type,
-    ifIndex: toFiniteNumber(iface.ifIndex),
-    stats: toRuntimeInterfaceStats(iface)
-  };
-}
-
-function toRuntimeContainer(container: ContainerState): HostRuntimeContainer {
-  const interfaces = [...container.interfaces.values()]
-    .map((iface) => toRuntimeInterface(iface))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  return {
-    name: container.name,
-    nodeName: container.nodeName,
-    labName: container.labName,
-    state: container.state,
-    kind: container.kind,
-    image: container.image,
-    ipv4Address: container.ipv4Address,
-    ipv6Address: container.ipv6Address,
-    interfaces
-  };
-}
-
-function getRuntimeContainersForLab(
-  labName: string | undefined,
-  labs: Map<string, LabState> = useLabStore.getState().labs
-): HostRuntimeContainer[] {
-  const lab = findLabState(labName, labs);
-  if (!lab) {
-    return [];
-  }
-
-  return [...lab.containers.values()].map((container) => toRuntimeContainer(container));
-}
-
-function runtimeInterfacesEqual(
-  previous: HostRuntimeInterface[] | undefined,
-  next: HostRuntimeInterface[] | undefined
-): boolean {
-  const prevInterfaces = [...(previous ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const nextInterfaces = [...(next ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  if (prevInterfaces.length !== nextInterfaces.length) {
-    return false;
-  }
-
-  for (let i = 0; i < prevInterfaces.length; i += 1) {
-    const prevIface = prevInterfaces[i];
-    const nextIface = nextInterfaces[i];
-    if (
-      prevIface.name !== nextIface.name ||
-      prevIface.alias !== nextIface.alias ||
-      prevIface.state !== nextIface.state ||
-      prevIface.type !== nextIface.type ||
-      prevIface.mac !== nextIface.mac ||
-      prevIface.mtu !== nextIface.mtu ||
-      prevIface.ifIndex !== nextIface.ifIndex
-    ) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function runtimeContainersEqual(
-  previous: HostRuntimeContainer[],
-  next: HostRuntimeContainer[]
-): boolean {
-  if (previous.length !== next.length) {
-    return false;
-  }
-
-  const byName = new Map(next.map((container) => [container.name, container]));
-  for (const container of previous) {
-    const candidate = byName.get(container.name);
-    if (!candidate) {
-      return false;
-    }
-    if (
-      candidate.nodeName !== container.nodeName ||
-      candidate.labName !== container.labName ||
-      candidate.state !== container.state ||
-      candidate.kind !== container.kind ||
-      candidate.image !== container.image ||
-      candidate.ipv4Address !== container.ipv4Address ||
-      candidate.ipv6Address !== container.ipv6Address
-    ) {
-      return false;
-    }
-    if (!runtimeInterfacesEqual(container.interfaces, candidate.interfaces)) {
-      return false;
-    }
-  }
-
-  return true;
-}
 
 function labsEqualForExplorer(previousLabs: Map<string, LabState>, nextLabs: Map<string, LabState>): boolean {
   if (previousLabs.size !== nextLabs.size) {
@@ -1797,8 +1658,9 @@ function setupMockVscodeApi(): void {
       }
 
       if (isStandaloneLifecycleCommand(msg.command)) {
-        void runStandaloneLifecycleCommand(msg.command).catch((error: unknown) => {
-          const config = LIFECYCLE_COMMAND_CONFIG[msg.command];
+        const lifecycleCommand = msg.command;
+        void runStandaloneLifecycleCommand(lifecycleCommand).catch((error: unknown) => {
+          const config = LIFECYCLE_COMMAND_CONFIG[lifecycleCommand];
           const message = error instanceof Error ? error.message : String(error);
           console.error(`[Standalone] ${config.label} failed:`, error);
           postLifecycleStatusMessage(config.commandType, "error", message);

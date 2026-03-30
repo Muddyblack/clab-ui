@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+type EventAttributeValue = string | number;
+
 export interface ContainerState {
   name: string;
   containerId: string;
@@ -58,33 +60,50 @@ export interface EventData {
   time?: number;
   type: string;
   action: string;
-  attributes: Record<string, string>;
+  attributes: Record<string, EventAttributeValue>;
 }
 
-function extractContainerState(attrs: Record<string, string>): ContainerState {
+function getAttrString(
+  attrs: Record<string, EventAttributeValue>,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = attrs[key];
+    if (typeof value === "string") {
+      return value;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return undefined;
+}
+
+function extractContainerState(attrs: Record<string, EventAttributeValue>): ContainerState {
   return {
-    name: attrs.name ?? "",
-    containerId: attrs["container-id"] ?? attrs.id ?? attrs.name ?? "",
-    labName: attrs.lab ?? attrs.containerlab ?? "",
-    labPath: attrs["lab-path"] ?? attrs["clab-topo-file"] ?? "",
-    owner: attrs["clab-owner"] ?? attrs.owner ?? "",
-    nodeName: attrs["clab-node-name"] ?? "",
-    kind: attrs["clab-node-kind"] ?? "",
-    image: attrs.image ?? "",
-    state: attrs.state ?? "running",
-    status: attrs.status ?? "",
-    ipv4Address: attrs["ipv4-address"] ?? attrs.mgmt_ipv4 ?? "N/A",
-    ipv6Address: attrs["ipv6-address"] ?? attrs.mgmt_ipv6 ?? "N/A",
+    name: getAttrString(attrs, "name") ?? "",
+    containerId: getAttrString(attrs, "container-id", "id", "name") ?? "",
+    labName: getAttrString(attrs, "lab", "containerlab") ?? "",
+    labPath: getAttrString(attrs, "lab-path", "clab-topo-file") ?? "",
+    owner: getAttrString(attrs, "clab-owner", "owner") ?? "",
+    nodeName: getAttrString(attrs, "clab-node-name") ?? "",
+    kind: getAttrString(attrs, "clab-node-kind") ?? "",
+    image: getAttrString(attrs, "image") ?? "",
+    state: getAttrString(attrs, "state") ?? "running",
+    status: getAttrString(attrs, "status") ?? "",
+    ipv4Address: getAttrString(attrs, "ipv4-address", "mgmt_ipv4") ?? "N/A",
+    ipv6Address: getAttrString(attrs, "ipv6-address", "mgmt_ipv6") ?? "N/A",
     interfaces: new Map()
   };
 }
 
 function upsertInterface(
   container: ContainerState,
-  attrs: Record<string, string>,
+  attrs: Record<string, EventAttributeValue>,
   action: string
 ): void {
-  const interfaceName = attrs.ifname ?? "";
+  const interfaceName = getAttrString(attrs, "ifname", "interface") ?? "";
   if (!interfaceName) return;
   if (interfaceName.startsWith("clab-")) {
     container.interfaces.delete(interfaceName);
@@ -98,26 +117,26 @@ function upsertInterface(
   const existing = container.interfaces.get(interfaceName);
   const next: InterfaceState = {
     name: interfaceName,
-    alias: attrs.alias ?? existing?.alias ?? "",
-    state: attrs.state ?? existing?.state ?? "",
-    type: attrs.type ?? existing?.type ?? "",
-    mac: attrs.mac ?? existing?.mac ?? "",
-    mtu: attrs.mtu ?? existing?.mtu ?? "",
-    ifIndex: attrs.index ?? existing?.ifIndex,
-    rxBps: attrs.rx_bps ?? existing?.rxBps,
-    txBps: attrs.tx_bps ?? existing?.txBps,
-    rxPps: attrs.rx_pps ?? existing?.rxPps,
-    txPps: attrs.tx_pps ?? existing?.txPps,
-    rxBytes: attrs.rx_bytes ?? existing?.rxBytes,
-    txBytes: attrs.tx_bytes ?? existing?.txBytes,
-    rxPackets: attrs.rx_packets ?? existing?.rxPackets,
-    txPackets: attrs.tx_packets ?? existing?.txPackets,
-    statsIntervalSeconds: attrs.interval_seconds ?? existing?.statsIntervalSeconds,
-    netemDelay: attrs.netem_delay ?? existing?.netemDelay,
-    netemJitter: attrs.netem_jitter ?? existing?.netemJitter,
-    netemLoss: attrs.netem_loss ?? existing?.netemLoss,
-    netemRate: attrs.netem_rate ?? existing?.netemRate,
-    netemCorruption: attrs.netem_corruption ?? existing?.netemCorruption
+    alias: getAttrString(attrs, "alias") ?? existing?.alias ?? "",
+    state: getAttrString(attrs, "state") ?? existing?.state ?? "",
+    type: getAttrString(attrs, "type") ?? existing?.type ?? "",
+    mac: getAttrString(attrs, "mac") ?? existing?.mac ?? "",
+    mtu: getAttrString(attrs, "mtu") ?? existing?.mtu ?? "",
+    ifIndex: getAttrString(attrs, "index") ?? existing?.ifIndex,
+    rxBps: getAttrString(attrs, "rx_bps") ?? existing?.rxBps,
+    txBps: getAttrString(attrs, "tx_bps") ?? existing?.txBps,
+    rxPps: getAttrString(attrs, "rx_pps") ?? existing?.rxPps,
+    txPps: getAttrString(attrs, "tx_pps") ?? existing?.txPps,
+    rxBytes: getAttrString(attrs, "rx_bytes") ?? existing?.rxBytes,
+    txBytes: getAttrString(attrs, "tx_bytes") ?? existing?.txBytes,
+    rxPackets: getAttrString(attrs, "rx_packets") ?? existing?.rxPackets,
+    txPackets: getAttrString(attrs, "tx_packets") ?? existing?.txPackets,
+    statsIntervalSeconds: getAttrString(attrs, "interval_seconds") ?? existing?.statsIntervalSeconds,
+    netemDelay: getAttrString(attrs, "netem_delay") ?? existing?.netemDelay,
+    netemJitter: getAttrString(attrs, "netem_jitter") ?? existing?.netemJitter,
+    netemLoss: getAttrString(attrs, "netem_loss") ?? existing?.netemLoss,
+    netemRate: getAttrString(attrs, "netem_rate") ?? existing?.netemRate,
+    netemCorruption: getAttrString(attrs, "netem_corruption") ?? existing?.netemCorruption
   };
 
   if (action === "stats") {
@@ -138,7 +157,7 @@ export const useLabStore = create<LabStoreState>((set, get) => ({
 
   processEvent: (event) => {
     const attrs = event.attributes;
-    const labName = attrs.lab || attrs.containerlab;
+    const labName = getAttrString(attrs, "lab", "containerlab");
     if (!labName) return;
 
     const previousLabs = get().labs;
@@ -146,9 +165,13 @@ export const useLabStore = create<LabStoreState>((set, get) => ({
     const existingLab = previousLabs.get(labName);
     const lab: LabState = existingLab
       ? { name: existingLab.name, owner: existingLab.owner, containers: new Map(existingLab.containers) }
-      : { name: labName, owner: attrs["clab-owner"] ?? attrs.owner ?? "", containers: new Map() };
+      : {
+          name: labName,
+          owner: getAttrString(attrs, "clab-owner", "owner") ?? "",
+          containers: new Map()
+        };
 
-    const containerName = attrs.name ?? "";
+    const containerName = getAttrString(attrs, "name") ?? "";
     if (!containerName) return;
     const action = event.action;
 
@@ -176,7 +199,7 @@ export const useLabStore = create<LabStoreState>((set, get) => ({
         lab.containers.set(containerName, container);
         labs.set(labName, lab);
       }
-    } else if (event.type === "interface") {
+    } else if (event.type === "interface" || event.type === "interface-stats") {
       const existing = lab.containers.get(containerName);
       const placeholder = extractContainerState(attrs);
       const container: ContainerState = existing
