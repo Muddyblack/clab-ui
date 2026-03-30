@@ -26,6 +26,42 @@ interface HostContext {
   mode?: "edit" | "view";
   deploymentState?: DeploymentState;
   sessionId?: string;
+  runtimeContainers?: HostRuntimeContainer[];
+}
+
+export interface HostRuntimeInterfaceStats {
+  rxBps?: number;
+  txBps?: number;
+  rxPps?: number;
+  txPps?: number;
+  rxBytes?: number;
+  txBytes?: number;
+  rxPackets?: number;
+  txPackets?: number;
+  statsIntervalSeconds?: number;
+}
+
+export interface HostRuntimeInterface {
+  name: string;
+  alias: string;
+  mac: string;
+  mtu: number;
+  state: string;
+  type: string;
+  ifIndex?: number;
+  stats?: HostRuntimeInterfaceStats;
+}
+
+export interface HostRuntimeContainer {
+  name: string;
+  nodeName: string;
+  labName: string;
+  state: string;
+  kind: string;
+  image: string;
+  ipv4Address: string;
+  ipv6Address: string;
+  interfaces?: HostRuntimeInterface[];
 }
 
 interface PendingRequest {
@@ -291,6 +327,7 @@ export async function requestSnapshot(
       path: hostContext.path,
       mode: hostContext.mode,
       deploymentState: hostContext.deploymentState,
+      runtimeContainers: hostContext.runtimeContainers,
       externalChange: options.externalChange ?? false
     })
   });
@@ -333,7 +370,8 @@ export async function dispatchTopologyCommand(
       baseRevision: revision,
       command,
       mode: hostContext.mode,
-      deploymentState: hostContext.deploymentState
+      deploymentState: hostContext.deploymentState,
+      runtimeContainers: hostContext.runtimeContainers
     })
   });
 

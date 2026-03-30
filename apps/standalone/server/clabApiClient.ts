@@ -22,25 +22,6 @@ export interface TopologyEntry {
   deploymentState: string;
 }
 
-export interface ClabLabInfo {
-  name: string;
-  containers: ClabContainerInfo[];
-}
-
-export interface ClabContainerInfo {
-  name: string;
-  container_id: string;
-  lab_name: string;
-  lab_path: string;
-  node_name: string;
-  kind: string;
-  image: string;
-  state: string;
-  status: string;
-  ipv4_address: string;
-  ipv6_address: string;
-}
-
 export class ClabApiClient {
   private readonly baseUrl: string;
 
@@ -66,61 +47,13 @@ export class ClabApiClient {
   }
 
   async listTopologies(token: string): Promise<TopologyEntry[]> {
-    const res = await this.get(`/api/v1/topologies`, token);
+    const res = await this.get(`/api/v1/labs/topology/files`, token);
     return (await res.json()) as TopologyEntry[];
-  }
-
-  async getTopologyYaml(token: string, labName: string): Promise<string> {
-    try {
-      const res = await this.get(`/api/v1/topologies/${enc(labName)}/yaml`, token);
-      return await res.text();
-    } catch (error) {
-      if (!isNotFoundError(error)) {
-        throw error;
-      }
-      const res = await this.get(`/api/v1/labs/${enc(labName)}/topology/yaml`, token);
-      return await res.text();
-    }
-  }
-
-  async putTopologyYaml(token: string, labName: string, content: string): Promise<void> {
-    try {
-      await this.request("PUT", `/api/v1/topologies/${enc(labName)}/yaml`, token, content, "text/plain");
-    } catch (error) {
-      if (!isNotFoundError(error)) {
-        throw error;
-      }
-      await this.request("PUT", `/api/v1/labs/${enc(labName)}/topology/yaml`, token, content, "text/plain");
-    }
-  }
-
-  async getAnnotations(token: string, labName: string): Promise<string> {
-    try {
-      const res = await this.get(`/api/v1/topologies/${enc(labName)}/annotations`, token);
-      return await res.text();
-    } catch (error) {
-      if (!isNotFoundError(error)) {
-        throw error;
-      }
-      const res = await this.get(`/api/v1/labs/${enc(labName)}/topology/annotations`, token);
-      return await res.text();
-    }
-  }
-
-  async putAnnotations(token: string, labName: string, content: string): Promise<void> {
-    try {
-      await this.request("PUT", `/api/v1/topologies/${enc(labName)}/annotations`, token, content, "text/plain");
-    } catch (error) {
-      if (!isNotFoundError(error)) {
-        throw error;
-      }
-      await this.request("PUT", `/api/v1/labs/${enc(labName)}/topology/annotations`, token, content, "text/plain");
-    }
   }
 
   async getFile(token: string, labName: string, filePath: string): Promise<string> {
     const res = await this.get(
-      `/api/v1/topologies/${enc(labName)}/file?path=${encodeURIComponent(filePath)}`,
+      `/api/v1/labs/${enc(labName)}/topology/file?path=${encodeURIComponent(filePath)}`,
       token
     );
     return await res.text();
@@ -129,7 +62,7 @@ export class ClabApiClient {
   async putFile(token: string, labName: string, filePath: string, content: string): Promise<void> {
     await this.request(
       "PUT",
-      `/api/v1/topologies/${enc(labName)}/file?path=${encodeURIComponent(filePath)}`,
+      `/api/v1/labs/${enc(labName)}/topology/file?path=${encodeURIComponent(filePath)}`,
       token,
       content,
       "text/plain"
@@ -138,7 +71,7 @@ export class ClabApiClient {
 
   async headFile(token: string, labName: string, filePath: string): Promise<boolean> {
     const res = await fetch(
-      `${this.baseUrl}/api/v1/topologies/${enc(labName)}/file?path=${encodeURIComponent(filePath)}`,
+      `${this.baseUrl}/api/v1/labs/${enc(labName)}/topology/file?path=${encodeURIComponent(filePath)}`,
       {
         method: "HEAD",
         headers: { Authorization: `Bearer ${token}` }
@@ -150,7 +83,7 @@ export class ClabApiClient {
   async deleteFile(token: string, labName: string, filePath: string): Promise<void> {
     await this.request(
       "DELETE",
-      `/api/v1/topologies/${enc(labName)}/file?path=${encodeURIComponent(filePath)}`,
+      `/api/v1/labs/${enc(labName)}/topology/file?path=${encodeURIComponent(filePath)}`,
       token
     );
   }
@@ -163,7 +96,7 @@ export class ClabApiClient {
   ): Promise<void> {
     await this.request(
       "POST",
-      `/api/v1/topologies/${enc(labName)}/file/rename`,
+      `/api/v1/labs/${enc(labName)}/topology/file/rename`,
       token,
       JSON.stringify({ oldPath, newPath }),
       "application/json"
@@ -173,7 +106,7 @@ export class ClabApiClient {
   async deployLab(token: string, labName: string): Promise<unknown> {
     const res = await this.request(
       "POST",
-      `/api/v1/topologies/${enc(labName)}/deploy`,
+      `/api/v1/labs/${enc(labName)}/deploy`,
       token,
       JSON.stringify({}),
       "application/json"
@@ -193,16 +126,6 @@ export class ClabApiClient {
       JSON.stringify({}),
       "application/json"
     );
-    return await res.json();
-  }
-
-  async listLabs(token: string): Promise<Record<string, ClabContainerInfo[]>> {
-    const res = await this.get(`/api/v1/labs`, token);
-    return (await res.json()) as Record<string, ClabContainerInfo[]>;
-  }
-
-  async inspectLab(token: string, labName: string): Promise<unknown> {
-    const res = await this.get(`/api/v1/labs/${enc(labName)}`, token);
     return await res.json();
   }
 

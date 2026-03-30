@@ -12,8 +12,6 @@ export interface ClabApiFileSystemOptions {
   labName: string;
 }
 
-const ANNOTATIONS_SUFFIX = ".annotations.json";
-
 function toPosixPath(pathValue: string): string {
   return pathValue.replace(/\\/g, "/");
 }
@@ -22,17 +20,11 @@ function normalizePath(pathValue: string): string {
   return toPosixPath(pathValue).replace(/\/+/g, "/").replace(/^\.\//, "");
 }
 
-function isAnnotationsPath(filePath: string): boolean {
-  return normalizePath(filePath).endsWith(ANNOTATIONS_SUFFIX);
-}
-
 /**
  * FileSystemAdapter that delegates to clab-api-server topology file endpoints.
  *
  * Maps file operations as follows:
- * - YAML files: GET/PUT /api/v1/topologies/{labName}/yaml
- * - Annotation files: GET/PUT /api/v1/topologies/{labName}/annotations
- * - Other files: GET/PUT/DELETE/HEAD /api/v1/topologies/{labName}/file?path=
+ * - All files: GET/PUT/DELETE/HEAD /api/v1/labs/{labName}/topology/file?path=
  */
 export class ClabApiFileSystemAdapter {
   private readonly client: ClabApiClient;
@@ -48,32 +40,6 @@ export class ClabApiFileSystemAdapter {
   async readFile(filePath: string): Promise<string> {
     const normalized = normalizePath(filePath);
 
-    if (isAnnotationsPath(normalized)) {
-      try {
-        return await this.client.getAnnotations(this.token, this.labName);
-      } catch (error) {
-        if (isNotFoundError(error)) {
-          const err = new Error(`ENOENT: no such file ${normalized}`) as Error & { code?: string };
-          err.code = "ENOENT";
-          throw err;
-        }
-        throw error;
-      }
-    }
-
-    if (normalized.endsWith(".clab.yml") || normalized.endsWith(".clab.yaml")) {
-      try {
-        return await this.client.getTopologyYaml(this.token, this.labName);
-      } catch (error) {
-        if (isNotFoundError(error)) {
-          const err = new Error(`ENOENT: no such file ${normalized}`) as Error & { code?: string };
-          err.code = "ENOENT";
-          throw err;
-        }
-        throw error;
-      }
-    }
-
     try {
       return await this.client.getFile(this.token, this.labName, normalized);
     } catch (error) {
@@ -88,17 +54,6 @@ export class ClabApiFileSystemAdapter {
 
   async writeFile(filePath: string, content: string): Promise<void> {
     const normalized = normalizePath(filePath);
-
-    if (isAnnotationsPath(normalized)) {
-      await this.client.putAnnotations(this.token, this.labName, content);
-      return;
-    }
-
-    if (normalized.endsWith(".clab.yml") || normalized.endsWith(".clab.yaml")) {
-      await this.client.putTopologyYaml(this.token, this.labName, content);
-      return;
-    }
-
     await this.client.putFile(this.token, this.labName, normalized, content);
   }
 
@@ -120,27 +75,6 @@ export class ClabApiFileSystemAdapter {
 
   async exists(filePath: string): Promise<boolean> {
     const normalized = normalizePath(filePath);
-
-    if (isAnnotationsPath(normalized)) {
-      try {
-        await this.client.getAnnotations(this.token, this.labName);
-        return true;
-      } catch (error) {
-        if (isNotFoundError(error)) return false;
-        throw error;
-      }
-    }
-
-    if (normalized.endsWith(".clab.yml") || normalized.endsWith(".clab.yaml")) {
-      try {
-        await this.client.getTopologyYaml(this.token, this.labName);
-        return true;
-      } catch (error) {
-        if (isNotFoundError(error)) return false;
-        throw error;
-      }
-    }
-
     return this.client.headFile(this.token, this.labName, normalized);
   }
 

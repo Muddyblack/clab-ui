@@ -10,6 +10,12 @@ import type { ClabApiClient } from "./clabApiClient.js";
 import { getTokenFromRequest } from "./middleware.js";
 
 type ClientResolver = (request: FastifyRequest) => ClabApiClient;
+const DEFAULT_INTERFACE_STATS_INTERVAL = "1s";
+
+function resolveInterfaceStatsInterval(): string {
+  const value = process.env.CLAB_STANDALONE_INTERFACE_STATS_INTERVAL?.trim();
+  return value && value.length > 0 ? value : DEFAULT_INTERFACE_STATS_INTERVAL;
+}
 
 export function registerEventsProxy(app: FastifyInstance, getClient: ClientResolver): void {
   app.get("/api/events", async (request: FastifyRequest, reply: FastifyReply) => {
@@ -42,7 +48,7 @@ export function registerEventsProxy(app: FastifyInstance, getClient: ClientResol
       const response = await client.openEventStream(token, {
         initialState: true,
         interfaceStats: true,
-        interfaceStatsInterval: "10s"
+        interfaceStatsInterval: resolveInterfaceStatsInterval()
       });
 
       if (!response.body) {

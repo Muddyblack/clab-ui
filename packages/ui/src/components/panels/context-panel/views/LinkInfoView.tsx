@@ -52,7 +52,7 @@ function getEndpoints(linkData: LinkInfoData): { a: EndpointData; b: EndpointDat
   const targetMac = getString(extraData.clabTargetMacAddress) ?? "";
   const targetType = getString(extraData.clabTargetType) ?? "";
 
-  const a: EndpointData = linkData.endpointA ?? {
+  const fallbackA: EndpointData = {
     node: linkData.source,
     interface: linkData.sourceEndpoint ?? "",
     mac: sourceMac,
@@ -60,14 +60,24 @@ function getEndpoints(linkData: LinkInfoData): { a: EndpointData; b: EndpointDat
     type: sourceType,
     stats: extraData.clabSourceStats
   };
+  const a: EndpointData = {
+    ...fallbackA,
+    ...(linkData.endpointA ?? {}),
+    stats: linkData.endpointA?.stats ?? fallbackA.stats
+  };
 
-  const b: EndpointData = linkData.endpointB ?? {
+  const fallbackB: EndpointData = {
     node: linkData.target,
     interface: linkData.targetEndpoint ?? "",
     mac: targetMac,
     mtu: extraData.clabTargetMtu ?? "",
     type: targetType,
     stats: extraData.clabTargetStats
+  };
+  const b: EndpointData = {
+    ...fallbackB,
+    ...(linkData.endpointB ?? {}),
+    stats: linkData.endpointB?.stats ?? fallbackB.stats
   };
 
   return { a, b };

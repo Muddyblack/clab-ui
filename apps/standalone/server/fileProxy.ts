@@ -18,45 +18,15 @@ export function registerFileProxy(app: FastifyInstance, getClient: ClientResolve
     try {
       const client = getClient(request);
       const topologies = await client.listTopologies(token);
-      const labs = await client.listLabs(token);
-
-      const filesByLab = new Map<string, {
-        filename: string;
-        path: string;
-        hasAnnotations: boolean;
-        labName: string;
-        deploymentState: string;
-      }>();
-
-      // Transform to the format expected by the Explorer bridge
-      for (const topo of topologies) {
-        filesByLab.set(topo.labName, {
-          filename: topo.yamlFileName,
-          path: topo.yamlFileName,
-          hasAnnotations: topo.hasAnnotations,
-          labName: topo.labName,
-          deploymentState: topo.deploymentState
-        });
-      }
-
-      for (const labName of Object.keys(labs)) {
-        const existing = filesByLab.get(labName);
-        if (existing) {
-          existing.deploymentState = "deployed";
-          filesByLab.set(labName, existing);
-          continue;
-        }
-
-        filesByLab.set(labName, {
-          filename: `${labName}.clab.yml`,
-          path: `${labName}.clab.yml`,
-          hasAnnotations: false,
-          labName,
-          deploymentState: "deployed"
-        });
-      }
-
-      return reply.send(Array.from(filesByLab.values()));
+      // Transform to the format expected by the Explorer bridge.
+      // Running/deployed state is derived from events in the frontend store.
+      return reply.send(topologies.map((topo) => ({
+        filename: topo.yamlFileName,
+        path: topo.yamlFileName,
+        hasAnnotations: topo.hasAnnotations,
+        labName: topo.labName,
+        deploymentState: "undeployed"
+      })));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return reply.status(500).send({ error: message });

@@ -303,7 +303,14 @@ function shouldCollectDevMockTrafficStats(
   isDevMock: boolean,
   interactionMode: "view" | "edit"
 ): boolean {
-  return isDevMock && interactionMode === "view";
+  if (!isDevMock || interactionMode !== "view") {
+    return false;
+  }
+  const vscodeApi = window.vscode as unknown;
+  if (isRecord(vscodeApi) && Reflect.get(vscodeApi, "__disableDevMockTraffic__") === true) {
+    return false;
+  }
+  return true;
 }
 
 function shouldShowBulkLinkModal(isRequested: boolean, isProcessing: boolean): boolean {

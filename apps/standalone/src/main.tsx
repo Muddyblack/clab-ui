@@ -12,7 +12,12 @@ import "@webview/styles/global.css";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
-import { setHostContext } from "@webview/services/topologyHostClient";
+import {
+  setHostContext,
+  type HostRuntimeContainer,
+  type HostRuntimeInterface,
+  type HostRuntimeInterfaceStats
+} from "@webview/services/topologyHostClient";
 import { refreshTopologySnapshot } from "@webview/services/topologyHostCommands";
 import { applyDevVars } from "@webview/theme/devTheme";
 import { MuiThemeProvider } from "@webview/theme";
@@ -34,7 +39,7 @@ import type {
 import { useTopoViewerStore } from "@webview/stores/topoViewerStore";
 
 import clabSchema from "../../../schema/clab.schema.json";
-import { useLabStore } from "./stores/labStore";
+import { useLabStore, type ContainerState, type InterfaceState, type LabState } from "./stores/labStore";
 import { useAuth } from "./hooks/useAuth";
 import { useEventStream } from "./hooks/useEventStream";
 import { LoginPage } from "./components/LoginPage";
@@ -91,6 +96,7 @@ currentTheme = loadPersistedTheme();
 
 // Explorer bridge constants
 const EXPLORER_REFRESH_DEBOUNCE_MS = 90;
+const TOPOLOGY_REFRESH_DEBOUNCE_MS = 120;
 const TREE_ITEM_NONE = 0;
 const TREE_ITEM_COLLAPSED = 1;
 
@@ -140,6 +146,12 @@ let explorerUiState: ExplorerUiState = {};
 let explorerRefreshTimer: number | null = null;
 let explorerActionBindings = new Map<string, ExplorerActionInvocation>();
 const unhandledCommands = new Set<string>();
+const FILE_LIST_CACHE_TTL_MS = 1500;
+let fileListCache: { fetchedAt: number; entries: TopologyFileEntry[] } | null = null;
+let fileListInFlight: Promise<TopologyFileEntry[]> | null = null;
+let topologyRefreshTimer: number | null = null;
+let topologyRefreshInFlight = false;
+let topologyRefreshQueued = false;
 
 function sendExplorerMessage(message: ExplorerIncomingMessage): void {
   window.dispatchEvent(new MessageEvent<ExplorerIncomingMessage>("message", { data: message }));
@@ -203,6 +215,170 @@ function isLabRunning(
   return false;
 }
 
+function findLabState(
+  labName: string | undefined,
+  labs: Map<string, LabState> = useLabStore.getState().labs
+): LabState | undefined {
+  if (!labName || labName.trim().length === 0) {
+    return undefined;
+  }
+
+  const target = normalizeLabIdentity(labName);
+  for (const [key, lab] of labs.entries()) {
+    if (normalizeLabIdentity(key) === target) {
+      return lab;
+    }
+  }
+  return undefined;
+}
+
+function toFiniteNumber(value: string | number | undefined): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function toRuntimeInterfaceStats(iface: InterfaceState): HostRuntimeInterfaceStats | undefined {
+  const stats: HostRuntimeInterfaceStats = {};
+  const assign = (key: keyof HostRuntimeInterfaceStats, value: string | number | undefined): void => {
+    const parsed = toFiniteNumber(value);
+    if (parsed !== undefined) {
+      stats[key] = parsed;
+    }
+  };
+
+  assign("rxBps", iface.rxBps);
+  assign("txBps", iface.txBps);
+  assign("rxPps", iface.rxPps);
+  assign("txPps", iface.txPps);
+  assign("rxBytes", iface.rxBytes);
+  assign("txBytes", iface.txBytes);
+  assign("rxPackets", iface.rxPackets);
+  assign("txPackets", iface.txPackets);
+  assign("statsIntervalSeconds", iface.statsIntervalSeconds);
+
+  return Object.keys(stats).length > 0 ? stats : undefined;
+}
+
+function toRuntimeInterface(iface: InterfaceState): HostRuntimeInterface {
+  return {
+    name: iface.name,
+    alias: iface.alias,
+    mac: iface.mac,
+    mtu: toFiniteNumber(iface.mtu) ?? 0,
+    state: iface.state,
+    type: iface.type,
+    ifIndex: toFiniteNumber(iface.ifIndex),
+    stats: toRuntimeInterfaceStats(iface)
+  };
+}
+
+function toRuntimeContainer(container: ContainerState): HostRuntimeContainer {
+  const interfaces = [...container.interfaces.values()]
+    .map((iface) => toRuntimeInterface(iface))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    name: container.name,
+    nodeName: container.nodeName,
+    labName: container.labName,
+    state: container.state,
+    kind: container.kind,
+    image: container.image,
+    ipv4Address: container.ipv4Address,
+    ipv6Address: container.ipv6Address,
+    interfaces
+  };
+}
+
+function getRuntimeContainersForLab(
+  labName: string | undefined,
+  labs: Map<string, LabState> = useLabStore.getState().labs
+): HostRuntimeContainer[] {
+  const lab = findLabState(labName, labs);
+  if (!lab) {
+    return [];
+  }
+
+  return [...lab.containers.values()].map((container) => toRuntimeContainer(container));
+}
+
+function runtimeContainersEqual(
+  previous: HostRuntimeContainer[],
+  next: HostRuntimeContainer[]
+): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  const byName = new Map(next.map((container) => [container.name, container]));
+  for (const container of previous) {
+    const candidate = byName.get(container.name);
+    if (!candidate) {
+      return false;
+    }
+    if (
+      candidate.nodeName !== container.nodeName ||
+      candidate.labName !== container.labName ||
+      candidate.state !== container.state ||
+      candidate.kind !== container.kind ||
+      candidate.image !== container.image ||
+      candidate.ipv4Address !== container.ipv4Address ||
+      candidate.ipv6Address !== container.ipv6Address
+    ) {
+      return false;
+    }
+
+    const prevInterfaces = [...(container.interfaces ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+    const nextInterfaces = [...(candidate.interfaces ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+    if (prevInterfaces.length !== nextInterfaces.length) {
+      return false;
+    }
+
+    for (let i = 0; i < prevInterfaces.length; i += 1) {
+      const prevIface = prevInterfaces[i];
+      const nextIface = nextInterfaces[i];
+      if (
+        prevIface.name !== nextIface.name ||
+        prevIface.alias !== nextIface.alias ||
+        prevIface.state !== nextIface.state ||
+        prevIface.type !== nextIface.type ||
+        prevIface.mac !== nextIface.mac ||
+        prevIface.mtu !== nextIface.mtu ||
+        prevIface.ifIndex !== nextIface.ifIndex
+      ) {
+        return false;
+      }
+
+      const prevStats = prevIface.stats;
+      const nextStats = nextIface.stats;
+      const keys: Array<keyof HostRuntimeInterfaceStats> = [
+        "rxBps",
+        "txBps",
+        "rxPps",
+        "txPps",
+        "rxBytes",
+        "txBytes",
+        "rxPackets",
+        "txPackets",
+        "statsIntervalSeconds"
+      ];
+      for (const key of keys) {
+        if (prevStats?.[key] !== nextStats?.[key]) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 function filterTreeItems(items: ExplorerTreeItem[], filterText: string): ExplorerTreeItem[] {
   const query = filterText.trim().toLowerCase();
   if (query.length === 0) return items;
@@ -239,6 +415,33 @@ function buildContainerTooltip(input: {
   return lines.join("\n");
 }
 
+function buildInterfaceTooltip(input: {
+  name: string;
+  alias: string;
+  state: string;
+  type: string;
+  mac: string;
+  mtu: string;
+  rxBps?: string;
+  txBps?: string;
+}): string {
+  const lines = [
+    `Name: ${input.name}`,
+    `Alias: ${input.alias || "N/A"}`,
+    `State: ${input.state || "unknown"}`,
+    `Type: ${input.type || "N/A"}`,
+    `MAC: ${input.mac || "N/A"}`,
+    `MTU: ${input.mtu || "N/A"}`
+  ];
+  if (input.rxBps) lines.push(`RX: ${input.rxBps} bps`);
+  if (input.txBps) lines.push(`TX: ${input.txBps} bps`);
+  return lines.join("\n");
+}
+
+function getInterfaceContextValue(state: string): string {
+  return state.toLowerCase() === "up" ? "containerlabInterfaceUp" : "containerlabInterfaceDown";
+}
+
 /**
  * Build running lab tree items from the live lab store (populated by events stream).
  */
@@ -253,6 +456,44 @@ function buildRunningLabItems(filterText: string, files: TopologyFileEntry[]): E
     const containers: ExplorerTreeItem[] = [];
 
     for (const [, container] of lab.containers) {
+      const interfaces = [...container.interfaces.values()]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .filter((iface) => {
+          const state = iface.state.toLowerCase();
+          return iface.name !== "lo" && state !== "unknown";
+        })
+        .map((iface) => {
+          const state = iface.state.toLowerCase();
+          const hasAlias = Boolean(iface.alias);
+          const label = hasAlias ? iface.alias : iface.name;
+          const stateText = state ? state.toUpperCase() : "";
+          const description = hasAlias
+            ? `${stateText || "UNKNOWN"} (${iface.name})`
+            : (stateText || iface.type || undefined);
+
+          return {
+            id: `running-interface:${container.name}:${iface.name}`,
+            label,
+            description,
+            tooltip: buildInterfaceTooltip({
+              name: iface.name,
+              alias: iface.alias,
+              state: iface.state,
+              type: iface.type,
+              mac: iface.mac,
+              mtu: iface.mtu,
+              rxBps: iface.rxBps,
+              txBps: iface.txBps
+            }),
+            contextValue: getInterfaceContextValue(state),
+            collapsibleState: TREE_ITEM_NONE,
+            cID: container.containerId,
+            name: iface.name,
+            mac: iface.mac,
+            children: []
+          };
+        });
+
       containers.push({
         id: `running-container:${container.name}`,
         label: container.nodeName || container.name,
@@ -268,7 +509,6 @@ function buildRunningLabItems(filterText: string, files: TopologyFileEntry[]): E
           ipv6: container.ipv6Address
         }),
         contextValue: "containerlabContainer",
-        collapsibleState: TREE_ITEM_NONE,
         state: container.state,
         status: container.status,
         name: container.name,
@@ -277,7 +517,8 @@ function buildRunningLabItems(filterText: string, files: TopologyFileEntry[]): E
         image: container.image,
         v4Address: container.ipv4Address,
         v6Address: container.ipv6Address,
-        children: []
+        collapsibleState: interfaces.length > 0 ? TREE_ITEM_COLLAPSED : TREE_ITEM_NONE,
+        children: interfaces
       });
     }
 
@@ -414,6 +655,36 @@ function scheduleExplorerSnapshot(delay = EXPLORER_REFRESH_DEBOUNCE_MS): void {
   }, delay);
 }
 
+async function flushTopologySnapshotRefresh(): Promise<void> {
+  if (topologyRefreshInFlight) {
+    topologyRefreshQueued = true;
+    return;
+  }
+
+  topologyRefreshInFlight = true;
+  try {
+    await refreshTopologySnapshot();
+  } catch {
+    // Ignore transient refresh errors; event stream updates will retry.
+  } finally {
+    topologyRefreshInFlight = false;
+    if (topologyRefreshQueued) {
+      topologyRefreshQueued = false;
+      scheduleTopologySnapshotRefresh(0);
+    }
+  }
+}
+
+function scheduleTopologySnapshotRefresh(delay = TOPOLOGY_REFRESH_DEBOUNCE_MS): void {
+  if (topologyRefreshTimer !== null) {
+    window.clearTimeout(topologyRefreshTimer);
+  }
+  topologyRefreshTimer = window.setTimeout(() => {
+    topologyRefreshTimer = null;
+    void flushTopologySnapshotRefresh();
+  }, delay);
+}
+
 // Topology loading
 
 function syncHostContext(options: {
@@ -425,11 +696,13 @@ function syncHostContext(options: {
   const isDeployed = isLabRunning(labName, labs);
   const deploymentState = options.deploymentState ?? (isDeployed ? "deployed" : "undeployed");
   const mode = options.mode ?? (deploymentState === "deployed" ? "view" : "edit");
+  const runtimeContainers = getRuntimeContainersForLab(labName, labs);
 
   setHostContext({
     path: currentFilePath ?? "",
     mode,
-    deploymentState
+    deploymentState,
+    runtimeContainers
   });
 }
 
@@ -440,7 +713,6 @@ async function loadTopologyFile(
   console.log(`[Standalone] Loading topology: ${filePath}`);
   currentFilePath = filePath;
   syncHostContext(options);
-  renderApp();
   const snapshot = await refreshTopologySnapshot();
 
   const activeLabName = stripTopologySuffix(safeFilename(filePath));
@@ -463,13 +735,34 @@ async function loadTopologyFile(
 }
 
 async function listTopologyFiles(): Promise<TopologyFileEntry[]> {
-  try {
-    const response = await fetch("/files", { credentials: "include" });
-    if (!response.ok) return [];
-    return await response.json();
-  } catch {
-    return [];
+  const now = Date.now();
+  if (fileListCache && now - fileListCache.fetchedAt < FILE_LIST_CACHE_TTL_MS) {
+    return fileListCache.entries;
   }
+
+  if (fileListInFlight) {
+    return fileListInFlight;
+  }
+
+  fileListInFlight = (async () => {
+    try {
+      const response = await fetch("/files", { credentials: "include" });
+      if (!response.ok) return [];
+      const entries = (await response.json()) as TopologyFileEntry[];
+      fileListCache = { fetchedAt: Date.now(), entries };
+      return entries;
+    } catch {
+      return [];
+    } finally {
+      fileListInFlight = null;
+    }
+  })();
+
+  return fileListInFlight;
+}
+
+function invalidateTopologyFileListCache(): void {
+  fileListCache = null;
 }
 
 function firstArgAsTreeItem(args: unknown[]): ExplorerTreeItem | undefined {
@@ -607,7 +900,7 @@ async function executeExplorerCommand(commandId: string, args: unknown[]): Promi
         postExplorerError(
           labName
             ? `No API-backed topology file found for running lab "${labName}".`
-            : "No API-backed topology file found for this item. Standalone mode only opens topologies exposed by /api/v1/topologies."
+            : "No API-backed topology file found for this item. Standalone mode only opens topologies exposed by /api/v1/labs/topology/files."
         );
         return;
       }
@@ -631,6 +924,7 @@ async function executeExplorerCommand(commandId: string, args: unknown[]): Promi
             credentials: "include",
             body: JSON.stringify({ labName })
           });
+          invalidateTopologyFileListCache();
         } catch (error) {
           console.error("[Standalone] Deploy failed:", error);
         }
@@ -647,6 +941,7 @@ async function executeExplorerCommand(commandId: string, args: unknown[]): Promi
             credentials: "include",
             body: JSON.stringify({ labName })
           });
+          invalidateTopologyFileListCache();
         } catch (error) {
           console.error("[Standalone] Destroy failed:", error);
         }
@@ -663,6 +958,7 @@ async function executeExplorerCommand(commandId: string, args: unknown[]): Promi
             credentials: "include",
             body: JSON.stringify({ labName })
           });
+          invalidateTopologyFileListCache();
         } catch (error) {
           console.error("[Standalone] Redeploy failed:", error);
         }
@@ -677,6 +973,31 @@ async function executeExplorerCommand(commandId: string, args: unknown[]): Promi
     case "containerlab.node.copyID": {
       const item = args[0] as ExplorerTreeItem | undefined;
       if (item?.cID) await navigator.clipboard.writeText(item.cID).catch(() => {});
+      return;
+    }
+    case "containerlab.node.copyKind": {
+      const item = args[0] as ExplorerTreeItem | undefined;
+      if (item?.kind) await navigator.clipboard.writeText(item.kind).catch(() => {});
+      return;
+    }
+    case "containerlab.node.copyImage": {
+      const item = args[0] as ExplorerTreeItem | undefined;
+      if (item?.image) await navigator.clipboard.writeText(item.image).catch(() => {});
+      return;
+    }
+    case "containerlab.node.copyIPv4Address": {
+      const item = args[0] as ExplorerTreeItem | undefined;
+      if (item?.v4Address) await navigator.clipboard.writeText(item.v4Address).catch(() => {});
+      return;
+    }
+    case "containerlab.node.copyIPv6Address": {
+      const item = args[0] as ExplorerTreeItem | undefined;
+      if (item?.v6Address) await navigator.clipboard.writeText(item.v6Address).catch(() => {});
+      return;
+    }
+    case "containerlab.interface.copyMACAddress": {
+      const item = args[0] as ExplorerTreeItem | undefined;
+      if (item?.mac) await navigator.clipboard.writeText(item.mac).catch(() => {});
       return;
     }
     case "containerlab.lab.copyPath": {
@@ -764,6 +1085,7 @@ function setupMockVscodeApi(): void {
 
   const mockVscodeApi = {
     __isDevMock__: true,
+    __disableDevMockTraffic__: true,
     postMessage: (message: unknown) => {
       const msg = message as VscodeMessage | undefined;
 
@@ -814,12 +1136,10 @@ function setupMockVscodeApi(): void {
 
 type StandaloneWindowState = Window & {
   __clabStandaloneReactRoot?: ReactRoot;
-  __clabStandaloneRenderKey?: number;
 };
 
 const standaloneWindowState = window as StandaloneWindowState;
 let reactRoot: ReactRoot | null = standaloneWindowState.__clabStandaloneReactRoot ?? null;
-let renderKey = standaloneWindowState.__clabStandaloneRenderKey ?? 0;
 
 function renderApp(): void {
   (window as unknown as Record<string, unknown>).__INITIAL_DATA__ = initialData;
@@ -834,9 +1154,7 @@ function renderApp(): void {
     standaloneWindowState.__clabStandaloneReactRoot = reactRoot;
   }
 
-  renderKey++;
-  standaloneWindowState.__clabStandaloneRenderKey = renderKey;
-  reactRoot.render(<StandaloneApp key={renderKey} />);
+  reactRoot.render(<StandaloneApp />);
 }
 
 /**
@@ -863,9 +1181,13 @@ function StandaloneApp() {
           const activeLabName = stripTopologySuffix(safeFilename(currentFilePath));
           const wasDeployed = isLabRunning(activeLabName, previousLabs);
           const isDeployed = isLabRunning(activeLabName, state.labs);
-          if (wasDeployed !== isDeployed) {
+          const previousRuntimeContainers = getRuntimeContainersForLab(activeLabName, previousLabs);
+          const nextRuntimeContainers = getRuntimeContainersForLab(activeLabName, state.labs);
+          const runtimeChanged = !runtimeContainersEqual(previousRuntimeContainers, nextRuntimeContainers);
+
+          if (wasDeployed !== isDeployed || (isDeployed && runtimeChanged)) {
             syncHostContext({ deploymentState: isDeployed ? "deployed" : "undeployed" });
-            void refreshTopologySnapshot().catch(() => {});
+            scheduleTopologySnapshotRefresh();
           }
         }
       }
