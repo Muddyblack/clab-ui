@@ -73,5 +73,3 @@ declare global {
     maplibreWorkerSourceBase64?: string;
   }
 }
-
-export {};

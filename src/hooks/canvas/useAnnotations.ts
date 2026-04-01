@@ -9,8 +9,7 @@ import {
   useGraphStore,
   useIsLocked
 } from "../../stores";
-import { collectNodeGroupMemberships } from "../../annotations/groupMembership";
-import { TRAFFIC_RATE_NODE_TYPE } from "../../annotations/annotationNodeConverters";
+import { collectNodeGroupMemberships, TRAFFIC_RATE_NODE_TYPE } from "../../annotations";
 import type { GroupStyleAnnotation } from "../../core/types/topology";
 
 import type { AnnotationContextValue } from "./annotationTypes";

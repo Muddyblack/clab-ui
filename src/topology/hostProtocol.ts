@@ -61,6 +61,13 @@ export interface HandleTopologyHostProtocolMessageOptions {
   postMessage: (message: TopologyHostResponseMessage) => void;
 }
 
+interface ParsedTopologyHostRequest {
+  message: Record<string, unknown>;
+  msgType: typeof TOPOLOGY_HOST_GET_SNAPSHOT | typeof TOPOLOGY_HOST_COMMAND;
+  requestId: string;
+  protocolVersion: number | undefined;
+}
+
 function withRequestId(
   response: TopologyHostResponseMessage,
   requestId: string
@@ -71,81 +78,115 @@ function withRequestId(
   };
 }
 
-export async function handleTopologyHostProtocolMessage(
-  options: HandleTopologyHostProtocolMessageOptions
-): Promise<boolean> {
-  const { host, message, onSnapshot, onSnapshotLoadError, postMessage } = options;
+function parseTopologyHostRequest(message: unknown): ParsedTopologyHostRequest | null {
   if (!isRecord(message)) {
-    return false;
+    return null;
   }
 
   const msgType = typeof message.type === "string" ? message.type : "";
   if (msgType !== TOPOLOGY_HOST_GET_SNAPSHOT && msgType !== TOPOLOGY_HOST_COMMAND) {
-    return false;
+    return null;
   }
 
-  const requestId = typeof message.requestId === "string" ? message.requestId : "";
-  const protocolVersion = getProtocolVersion(message);
-  if (protocolVersion !== TOPOLOGY_HOST_PROTOCOL_VERSION) {
+  return {
+    message,
+    msgType,
+    requestId: typeof message.requestId === "string" ? message.requestId : "",
+    protocolVersion: getProtocolVersion(message)
+  };
+}
+
+function postProtocolError(
+  postMessage: (message: TopologyHostResponseMessage) => void,
+  requestId: string,
+  error: string
+): void {
+  postMessage({
+    type: "topology-host:error",
+    protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
+    requestId,
+    error
+  });
+}
+
+async function handleSnapshotRequest(
+  host: TopologyHost,
+  requestId: string,
+  onSnapshot: ((snapshot: TopologySnapshot) => void) | undefined,
+  onSnapshotLoadError: ((errorMessage: string) => void) | undefined,
+  postMessage: (message: TopologyHostResponseMessage) => void
+): Promise<void> {
+  try {
+    const snapshot = await host.getSnapshot();
+    onSnapshot?.(snapshot);
     postMessage({
-      type: "topology-host:error",
-      protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
-      requestId,
-      error: `Unsupported topology host protocol version: ${protocolVersion ?? "unknown"}`
+      ...buildTopologySnapshotMessage(snapshot, "init"),
+      requestId
     });
-    return true;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    onSnapshotLoadError?.(errorMessage);
+    postProtocolError(postMessage, requestId, errorMessage);
   }
+}
 
-  if (!host) {
-    postMessage({
-      type: "topology-host:error",
-      protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
-      requestId,
-      error: "Topology host unavailable"
-    });
-    return true;
+function getResponseSnapshot(response: TopologyHostResponseMessage): TopologySnapshot | undefined {
+  if (response.type === "topology-host:ack" || response.type === "topology-host:reject") {
+    return response.snapshot;
   }
+  return undefined;
+}
 
-  if (msgType === TOPOLOGY_HOST_GET_SNAPSHOT) {
-    try {
-      const snapshot = await host.getSnapshot();
-      onSnapshot?.(snapshot);
-      postMessage({
-        ...buildTopologySnapshotMessage(snapshot, "init"),
-        requestId
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      onSnapshotLoadError?.(errorMessage);
-      postMessage({
-        type: "topology-host:error",
-        protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
-        requestId,
-        error: errorMessage
-      });
-    }
-    return true;
-  }
-
-  const commandData = parseCommandRequest(message);
+async function handleCommandRequest(
+  host: TopologyHost,
+  request: Record<string, unknown>,
+  requestId: string,
+  onSnapshot: ((snapshot: TopologySnapshot) => void) | undefined,
+  postMessage: (message: TopologyHostResponseMessage) => void
+): Promise<void> {
+  const commandData = parseCommandRequest(request);
   if (!commandData) {
-    postMessage({
-      type: "topology-host:error",
-      protocolVersion: TOPOLOGY_HOST_PROTOCOL_VERSION,
-      requestId,
-      error: "Invalid topology host command payload"
-    });
-    return true;
+    postProtocolError(postMessage, requestId, "Invalid topology host command payload");
+    return;
   }
 
   const response = await host.applyCommand(commandData.command, commandData.baseRevision);
   const responseWithId = withRequestId(response, requestId);
-  if (responseWithId.type === "topology-host:ack" || responseWithId.type === "topology-host:reject") {
-    const snapshot = (responseWithId as { snapshot?: TopologySnapshot }).snapshot;
-    if (snapshot) {
-      onSnapshot?.(snapshot);
-    }
+  const snapshot = getResponseSnapshot(responseWithId);
+  if (snapshot) {
+    onSnapshot?.(snapshot);
   }
   postMessage(responseWithId);
+}
+
+export async function handleTopologyHostProtocolMessage(
+  options: HandleTopologyHostProtocolMessageOptions
+): Promise<boolean> {
+  const { host, message, onSnapshot, onSnapshotLoadError, postMessage } = options;
+  const parsedRequest = parseTopologyHostRequest(message);
+  if (!parsedRequest) {
+    return false;
+  }
+  const { message: parsedMessage, msgType, requestId, protocolVersion } = parsedRequest;
+  if (protocolVersion !== TOPOLOGY_HOST_PROTOCOL_VERSION) {
+    postProtocolError(
+      postMessage,
+      requestId,
+      `Unsupported topology host protocol version: ${protocolVersion ?? "unknown"}`
+    );
+    return true;
+  }
+
+  if (!host) {
+    postProtocolError(postMessage, requestId, "Topology host unavailable");
+    return true;
+  }
+
+  if (msgType === TOPOLOGY_HOST_GET_SNAPSHOT) {
+    await handleSnapshotRequest(host, requestId, onSnapshot, onSnapshotLoadError, postMessage);
+    return true;
+  }
+
+  await handleCommandRequest(host, parsedMessage, requestId, onSnapshot, postMessage);
   return true;
 }

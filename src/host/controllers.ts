@@ -281,16 +281,16 @@ export function createExplorerController(options: ExplorerControllerOptions): Ex
       switch (message.command) {
         case "ready":
           this.connect();
-          return;
+          break;
         case "setFilter":
           await this.setFilter(message.value);
-          return;
+          break;
         case "invokeAction":
           await this.invokeAction(message.actionRef);
-          return;
+          break;
         case "persistUiState":
           await this.persistUiState(message.state);
-          return;
+          break;
       }
     },
 

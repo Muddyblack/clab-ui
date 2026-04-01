@@ -45,42 +45,55 @@ function toEndpointTab(id: string): EndpointTab {
   return id === "b" ? "b" : "a";
 }
 
+function buildFallbackEndpoint(options: {
+  node: string;
+  endpoint?: string;
+  mac?: string;
+  mtu?: string | number;
+  type?: string;
+  stats?: InterfaceStatsPayload;
+}): EndpointData {
+  return {
+    node: options.node,
+    interface: options.endpoint ?? "",
+    mac: options.mac ?? "",
+    mtu: options.mtu ?? "",
+    type: options.type ?? "",
+    stats: options.stats
+  };
+}
+
+function mergeEndpointData(fallback: EndpointData, override?: EndpointData): EndpointData {
+  return {
+    ...fallback,
+    ...(override ?? {}),
+    stats: override?.stats ?? fallback.stats
+  };
+}
+
 function getEndpoints(linkData: LinkInfoData): { a: EndpointData; b: EndpointData } {
   const extraData = linkData.extraData ?? {};
-  const sourceMac = getString(extraData.clabSourceMacAddress) ?? "";
-  const sourceType = getString(extraData.clabSourceType) ?? "";
-  const targetMac = getString(extraData.clabTargetMacAddress) ?? "";
-  const targetType = getString(extraData.clabTargetType) ?? "";
-
-  const fallbackA: EndpointData = {
+  const fallbackA = buildFallbackEndpoint({
     node: linkData.source,
-    interface: linkData.sourceEndpoint ?? "",
-    mac: sourceMac,
-    mtu: extraData.clabSourceMtu ?? "",
-    type: sourceType,
+    endpoint: linkData.sourceEndpoint,
+    mac: getString(extraData.clabSourceMacAddress) ?? "",
+    mtu: extraData.clabSourceMtu,
+    type: getString(extraData.clabSourceType) ?? "",
     stats: extraData.clabSourceStats
-  };
-  const a: EndpointData = {
-    ...fallbackA,
-    ...(linkData.endpointA ?? {}),
-    stats: linkData.endpointA?.stats ?? fallbackA.stats
-  };
-
-  const fallbackB: EndpointData = {
+  });
+  const fallbackB = buildFallbackEndpoint({
     node: linkData.target,
-    interface: linkData.targetEndpoint ?? "",
-    mac: targetMac,
-    mtu: extraData.clabTargetMtu ?? "",
-    type: targetType,
+    endpoint: linkData.targetEndpoint,
+    mac: getString(extraData.clabTargetMacAddress) ?? "",
+    mtu: extraData.clabTargetMtu,
+    type: getString(extraData.clabTargetType) ?? "",
     stats: extraData.clabTargetStats
-  };
-  const b: EndpointData = {
-    ...fallbackB,
-    ...(linkData.endpointB ?? {}),
-    stats: linkData.endpointB?.stats ?? fallbackB.stats
-  };
+  });
 
-  return { a, b };
+  return {
+    a: mergeEndpointData(fallbackA, linkData.endpointA),
+    b: mergeEndpointData(fallbackB, linkData.endpointB)
+  };
 }
 
 export const LinkInfoView: React.FC<LinkInfoViewProps> = ({ linkData }) => {

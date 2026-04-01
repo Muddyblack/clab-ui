@@ -87,89 +87,151 @@ function isExplorerIncomingMessage(value: unknown): value is ExplorerIncomingMes
   }
 }
 
+function toModeChangedEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "modeChanged" }> | null {
+  const data = isRecord(value.data) ? value.data : undefined;
+  const mode = data?.mode;
+  const deploymentState = data?.deploymentState;
+
+  let normalizedMode: "editor" | "viewer" | null = null;
+  if (mode === "editor") {
+    normalizedMode = "editor";
+  } else if (mode === "viewer" || mode === "view") {
+    normalizedMode = "viewer";
+  }
+  if (normalizedMode === null) {
+    return null;
+  }
+  if (
+    deploymentState !== "deployed" &&
+    deploymentState !== "undeployed" &&
+    deploymentState !== "unknown"
+  ) {
+    return null;
+  }
+
+  return {
+    type: "modeChanged",
+    mode: normalizedMode,
+    deploymentState
+  };
+}
+
+function toPanelActionEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "panelAction" }> | null {
+  if (typeof value.action !== "string") {
+    return null;
+  }
+  return {
+    type: "panelAction",
+    action: value.action,
+    ...(typeof value.nodeId === "string" ? { nodeId: value.nodeId } : {}),
+    ...(typeof value.edgeId === "string" ? { edgeId: value.edgeId } : {})
+  };
+}
+
+function toCustomNodesUpdatedEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "customNodesUpdated" }> {
+  return {
+    type: "customNodesUpdated",
+    customNodes: Array.isArray(value.customNodes) ? value.customNodes : [],
+    defaultNode: typeof value.defaultNode === "string" ? value.defaultNode : ""
+  };
+}
+
+function toCustomNodeErrorEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "customNodeError" }> | null {
+  return typeof value.error === "string"
+    ? {
+        type: "customNodeError",
+        error: value.error
+      }
+    : null;
+}
+
+function toIconListEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "iconList" }> {
+  return {
+    type: "iconList",
+    icons: Array.isArray(value.icons) ? value.icons : []
+  };
+}
+
+function toLifecycleLogEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "lifecycleLog" }> | null {
+  const data = isRecord(value.data) ? value.data : undefined;
+  if (typeof data?.line !== "string") {
+    return null;
+  }
+  return {
+    type: "lifecycleLog",
+    line: data.line,
+    stream: data.stream === "stderr" ? "stderr" : "stdout"
+  };
+}
+
+function toLifecycleStatusEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "lifecycleStatus" }> | null {
+  const data = isRecord(value.data) ? value.data : undefined;
+  if (data?.status !== "success" && data?.status !== "error") {
+    return null;
+  }
+
+  return {
+    type: "lifecycleStatus",
+    status: data.status,
+    ...(typeof data.errorMessage === "string" ? { errorMessage: data.errorMessage } : {})
+  };
+}
+
+function toSvgExportResultEvent(
+  value: Record<string, unknown>
+): Extract<ClabUiTopoViewerEvent, { type: "svgExportResult" }> | null {
+  if (typeof value.requestId !== "string" || typeof value.success !== "boolean") {
+    return null;
+  }
+  return {
+    type: "svgExportResult",
+    requestId: value.requestId,
+    success: value.success,
+    ...(typeof value.error === "string" ? { error: value.error } : {}),
+    ...(Array.isArray(value.files)
+      ? { files: value.files.filter((entry): entry is string => typeof entry === "string") }
+      : {})
+  };
+}
+
 function toTopoViewerEvent(value: unknown): ClabUiTopoViewerEvent | null {
   if (!isRecord(value) || typeof value.type !== "string") {
     return null;
   }
 
   switch (value.type) {
-    case "topo-mode-changed": {
-      const data = isRecord(value.data) ? value.data : undefined;
-      const mode = data?.mode;
-      const deploymentState = data?.deploymentState;
-      if (
-        (mode === "editor" || mode === "viewer" || mode === "view") &&
-        (deploymentState === "deployed" ||
-          deploymentState === "undeployed" ||
-          deploymentState === "unknown")
-      ) {
-        return {
-          type: "modeChanged",
-          mode: mode === "view" ? "viewer" : mode,
-          deploymentState
-        };
-      }
-      return null;
-    }
+    case "topo-mode-changed":
+      return toModeChangedEvent(value);
     case "panel-action":
-      return typeof value.action === "string"
-        ? {
-            type: "panelAction",
-            action: value.action,
-            ...(typeof value.nodeId === "string" ? { nodeId: value.nodeId } : {}),
-            ...(typeof value.edgeId === "string" ? { edgeId: value.edgeId } : {})
-          }
-        : null;
+      return toPanelActionEvent(value);
     case "custom-nodes-updated":
-      return {
-        type: "customNodesUpdated",
-        customNodes: Array.isArray(value.customNodes) ? value.customNodes : [],
-        defaultNode: typeof value.defaultNode === "string" ? value.defaultNode : ""
-      };
+      return toCustomNodesUpdatedEvent(value);
     case "custom-node-error":
-      return typeof value.error === "string"
-        ? { type: "customNodeError", error: value.error }
-        : null;
+      return toCustomNodeErrorEvent(value);
     case "icon-list-response":
-      return {
-        type: "iconList",
-        icons: Array.isArray(value.icons) ? value.icons : []
-      };
-    case "lab-lifecycle-log": {
-      const data = isRecord(value.data) ? value.data : undefined;
-      return typeof data?.line === "string"
-        ? {
-            type: "lifecycleLog",
-            line: data.line,
-            stream: data.stream === "stderr" ? "stderr" : "stdout"
-          }
-        : null;
-    }
-    case "lab-lifecycle-status": {
-      const data = isRecord(value.data) ? value.data : undefined;
-      if (data?.status !== "success" && data?.status !== "error") {
-        return null;
-      }
-      return {
-        type: "lifecycleStatus",
-        status: data.status,
-        ...(typeof data.errorMessage === "string" ? { errorMessage: data.errorMessage } : {})
-      };
-    }
+      return toIconListEvent(value);
+    case "lab-lifecycle-log":
+      return toLifecycleLogEvent(value);
+    case "lab-lifecycle-status":
+      return toLifecycleStatusEvent(value);
     case "fit-viewport":
       return { type: "fitViewport" };
     case "svg-export-result":
-      return typeof value.requestId === "string" && typeof value.success === "boolean"
-        ? {
-            type: "svgExportResult",
-            requestId: value.requestId,
-            success: value.success,
-            ...(typeof value.error === "string" ? { error: value.error } : {}),
-            ...(Array.isArray(value.files)
-              ? { files: value.files.filter((entry): entry is string => typeof entry === "string") }
-              : {})
-          }
-        : null;
+      return toSvgExportResultEvent(value);
     default:
       return null;
   }
@@ -273,12 +335,12 @@ export function createWindowClabUiHost(options: WindowHostOptions = {}): ClabUiH
         postMessage({ command: "topo-toggle-split-view" });
       },
       runNodeAction(action: TopoViewerNodeAction, nodeName: string): void {
-        const command =
-          action === "ssh"
-            ? "clab-node-connect-ssh"
-            : action === "shell"
-              ? "clab-node-attach-shell"
-              : "clab-node-view-logs";
+        let command = "clab-node-view-logs";
+        if (action === "ssh") {
+          command = "clab-node-connect-ssh";
+        } else if (action === "shell") {
+          command = "clab-node-attach-shell";
+        }
         postMessage({ command, nodeName });
       },
       captureInterface(nodeName: string, interfaceName: string): void {

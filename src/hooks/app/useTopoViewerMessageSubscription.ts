@@ -60,16 +60,18 @@ function handlePanelAction(
   switch (action) {
     case "edit-node":
       if (nodeId !== undefined) editNode(nodeId);
-      return;
+      break;
     case "edit-link":
       if (edgeId !== undefined) editEdge(edgeId);
-      return;
+      break;
     case "node-info":
       if (nodeId !== undefined) selectNode(nodeId);
-      return;
+      break;
     case "link-info":
       if (edgeId !== undefined) selectEdge(edgeId);
-      return;
+      break;
+    default:
+      break;
   }
 }
 
@@ -136,30 +138,30 @@ export function useTopoViewerMessageSubscription(): void {
       switch (event.type) {
         case "modeChanged":
           handleTopoModeChanged(event);
-          return;
+          break;
         case "panelAction":
           handlePanelAction(event);
-          return;
+          break;
         case "customNodesUpdated":
           handleCustomNodesUpdated(event);
-          return;
+          break;
         case "customNodeError":
           handleCustomNodeError(event);
-          return;
+          break;
         case "iconList":
           handleIconList(event);
-          return;
+          break;
         case "lifecycleLog":
           handleLifecycleLog(event);
-          return;
+          break;
         case "lifecycleStatus":
           handleLifecycleStatus(event);
-          return;
+          break;
         case "fitViewport":
           handleFitViewport();
-          return;
+          break;
         case "svgExportResult":
-          return;
+          break;
       }
     });
   }, [host]);
