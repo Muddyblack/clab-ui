@@ -21,9 +21,10 @@ import {
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import { MuiThemeProvider } from "../../reactTopoViewer/webview/theme";
+import { ClabUiRuntimeProvider, type ClabUiRuntime } from "../../host";
+import { MuiThemeProvider } from "@srl-labs/clab-ui/theme";
 import { useMessageListener, usePostMessage } from "../shared/hooks";
-import containerlabLogo from "../../../resources/containerlab.svg";
+import containerlabLogo from "../../assets/images/containerlab.svg";
 
 interface PopularRepo {
   name: string;
@@ -83,7 +84,7 @@ const COMMUNITY_LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: "Discord", href: "https://discord.gg/vAyddtaEV9" }
 ];
 
-function WelcomePageApp(): React.JSX.Element {
+export function WelcomePageApp(): React.JSX.Element {
   const initialData = (window.__INITIAL_DATA__ ?? {}) as WelcomeInitialData;
   const extensionVersion = initialData.extensionVersion ?? "unknown";
 
@@ -309,7 +310,7 @@ function WelcomePageApp(): React.JSX.Element {
   );
 }
 
-function bootstrapWelcomePage(): void {
+export function bootstrapWelcomePage(runtime: ClabUiRuntime): void {
   const container = document.getElementById("root");
   if (!container) {
     throw new Error("Welcome page root element not found");
@@ -317,10 +318,10 @@ function bootstrapWelcomePage(): void {
 
   const root = createRoot(container);
   root.render(
-    <React.StrictMode>
-      <WelcomePageApp />
-    </React.StrictMode>
+    <ClabUiRuntimeProvider runtime={runtime}>
+      <React.StrictMode>
+        <WelcomePageApp />
+      </React.StrictMode>
+    </ClabUiRuntimeProvider>
   );
 }
-
-bootstrapWelcomePage();
