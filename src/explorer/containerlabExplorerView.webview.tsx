@@ -12,6 +12,7 @@ import {
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
   ForumOutlined as ForumOutlinedIcon,
+  HubOutlined as HubOutlinedIcon,
   Link as LinkIcon,
   LinkOff as LinkOffIcon,
   ManageSearch as ManageSearchIcon,
@@ -899,7 +900,7 @@ function nodeLeadingIcon(
 
   const context = node.contextValue;
   if (isEndpointNode(context)) {
-    return { Icon: SettingsEthernetIcon, color: COLOR_TEXT_SECONDARY };
+    return { Icon: HubOutlinedIcon, color: COLOR_TEXT_PRIMARY };
   }
   if (context === "containerlabInterfaceUp") {
     return { Icon: SettingsEthernetIcon, color: "success.main" };
@@ -1199,11 +1200,13 @@ function ExplorerNodeMarker({
   showStatusDot,
   statusIndicator
 }: Readonly<ExplorerNodeMarkerProps>) {
+  const markerSlotPx = leadingIcon && isEndpointRoot ? NODE_MARKER_SLOT_PX + 3 : NODE_MARKER_SLOT_PX;
+
   return (
     <Box
       sx={{
-        width: NODE_MARKER_SLOT_PX,
-        flex: `0 0 ${NODE_MARKER_SLOT_PX}px`,
+        width: markerSlotPx,
+        flex: `0 0 ${markerSlotPx}px`,
         display: "flex",
         alignItems: "center",
         justifyContent: "center"
@@ -1213,7 +1216,7 @@ function ExplorerNodeMarker({
         <leadingIcon.Icon
           fontSize="inherit"
           sx={{
-            fontSize: isEndpointRoot ? 15 : 13,
+            fontSize: isEndpointRoot ? 14 : 13,
             color: leadingIcon.color,
             flex: "0 0 auto"
           }}
@@ -1491,7 +1494,7 @@ function ExplorerNodeTextBlock({
       >
         <Stack
           direction="row"
-          spacing={TREE_ROW_GAP}
+          spacing={isEndpointRoot ? 0.45 : TREE_ROW_GAP}
           alignItems="center"
           sx={{ minWidth: 0, width: "100%" }}
         >
@@ -1712,6 +1715,7 @@ function SectionTreeNode({
   const isExpanded = expandedItems.includes(node.id);
   const isEndpointRoot = isEndpointNode(node.contextValue);
   const isEndpointSection = isEndpointSectionNode(node.contextValue);
+  const toggleOnRowClick = hasChildren && (isEndpointRoot || isEndpointSection);
   const rowMinHeight = endpointRowHeight(isEndpointRoot, isEndpointSection);
 
   return (
@@ -1752,7 +1756,17 @@ function SectionTreeNode({
           )}
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box
+          onClick={(event) => {
+            if (!toggleOnRowClick) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            onToggleExpanded(node.id);
+          }}
+          sx={{ flex: 1, minWidth: 0, cursor: toggleOnRowClick ? "pointer" : "default" }}
+        >
           <ExplorerNodeLabel node={node} sectionId={sectionId} onInvokeAction={onInvokeAction} />
         </Box>
       </Stack>
