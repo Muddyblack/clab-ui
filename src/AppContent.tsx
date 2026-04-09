@@ -62,6 +62,7 @@ import {
 import {
   useAnnotationUIActions,
   useAnnotationUIState,
+  useCanvasStore,
   useGraphActions,
   useGraphState,
   useGraphStore,
@@ -318,6 +319,40 @@ function shouldCollectDevMockTrafficStats(
 
 function shouldShowBulkLinkModal(isRequested: boolean, isProcessing: boolean): boolean {
   return isRequested && !isProcessing;
+}
+
+function hasActiveTopologySession(
+  sessionClient: ReturnType<typeof useTopologySessionClient>,
+  labName: string
+): boolean {
+  const context = sessionClient.getContext();
+  if (context.topologyRef !== undefined) {
+    return true;
+  }
+  if (typeof context.path === "string" && context.path.trim().length > 0) {
+    return true;
+  }
+  return labName.trim().length > 0;
+}
+
+function resolveTopologyViewportKey(
+  sessionClient: ReturnType<typeof useTopologySessionClient>,
+  labName: string
+): string | null {
+  const context = sessionClient.getContext();
+  const topologyId = context.topologyRef?.topologyId?.trim();
+  if (topologyId && topologyId.length > 0) {
+    return topologyId;
+  }
+  const path = context.path?.trim();
+  if (path && path.length > 0) {
+    return `path:${path}`;
+  }
+  const normalizedLabName = labName.trim();
+  if (normalizedLabName.length > 0) {
+    return `lab:${normalizedLabName}`;
+  }
+  return null;
 }
 
 interface DevExplorerPaneState {
@@ -675,6 +710,8 @@ export const AppContent: React.FC<AppContentProps> = ({
   const graphActions = useGraphActions();
   const annotationUiActions = useAnnotationUIActions();
   const isProcessing = state.isProcessing;
+  const hasActiveTopology = hasActiveTopologySession(sessionClient, state.labName);
+  const topologyViewportKey = resolveTopologyViewportKey(sessionClient, state.labName);
   const isInteractionLocked = getInteractionLockState(state.isLocked, isProcessing);
   const interactionMode = getInteractionMode(state.mode, isProcessing);
   const isDevMock = React.useMemo(() => isDevMockWebview(host), [host]);
@@ -1294,10 +1331,15 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Auto-open context panel when selection/editing state changes
   React.useEffect(() => {
-    if (hasContextContent && !isProcessing && !panelVisibility.isContextPanelOpen) {
+    if (
+      hasActiveTopology &&
+      hasContextContent &&
+      !isProcessing &&
+      !panelVisibility.isContextPanelOpen
+    ) {
       panelVisibility.handleOpenContextPanel("auto");
     }
-  }, [hasContextContent, isProcessing, panelVisibility]);
+  }, [hasActiveTopology, hasContextContent, isProcessing, panelVisibility]);
 
   // close if palette wasn't open, else go back to palette
   const handleContextPanelBack = React.useCallback(() => {
@@ -1319,13 +1361,17 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [reactFlowRef, rfInstance]);
 
   const handleOpenNodePalette = React.useCallback(() => {
+    if (!hasActiveTopology) {
+      return;
+    }
     handleContextPanelBack();
     panelVisibility.handleOpenContextPanel();
-  }, [handleContextPanelBack, panelVisibility]);
+  }, [handleContextPanelBack, hasActiveTopology, panelVisibility]);
 
   const canvasProps = React.useMemo<CanvasPropsWithoutGraph>(
     () => ({
-      isContextPanelOpen: panelVisibility.isContextPanelOpen,
+      topologyViewportKey,
+      isContextPanelOpen: hasActiveTopology && panelVisibility.isContextPanelOpen,
       onPaneClick: handleEmptyCanvasClick,
       layout: layoutControls.layout,
       isGeoLayout: layoutControls.isGeoLayout,
@@ -1354,6 +1400,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       onLockedAction: handleLockedAction
     }),
     [
+      topologyViewportKey,
+      hasActiveTopology,
       panelVisibility.isContextPanelOpen,
       handleEmptyCanvasClick,
       layoutControls.layout,
@@ -1405,13 +1453,55 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [sendCancelLabLifecycle]);
 
   const handleToggleSplit = React.useCallback(() => {
+    if (!hasActiveTopology) {
+      return;
+    }
     panelVisibility.handleOpenContextPanel("manual");
     setPaletteTabRequest({ tabId: "yaml" });
-  }, [panelVisibility]);
+  }, [hasActiveTopology, panelVisibility]);
   const isBulkLinkModalOpen = shouldShowBulkLinkModal(
-    panelVisibility.showBulkLinkModal,
+    hasActiveTopology && panelVisibility.showBulkLinkModal,
     isProcessing
   );
+
+  React.useEffect(() => {
+    if (hasActiveTopology) {
+      return;
+    }
+    if (!panelVisibility.isContextPanelOpen) {
+      panelVisibility.handleOpenContextPanel("manual");
+    }
+    if (panelVisibility.findPopoverPosition !== null) {
+      panelVisibility.handleCloseFindPopover();
+    }
+    if (panelVisibility.showLabSettingsModal) {
+      panelVisibility.handleCloseLabSettings();
+    }
+    if (panelVisibility.showSvgExportModal) {
+      panelVisibility.handleCloseSvgExport();
+    }
+    if (panelVisibility.showBulkLinkModal) {
+      panelVisibility.handleCloseBulkLink();
+    }
+  }, [hasActiveTopology, panelVisibility]);
+
+  const previousHasActiveTopology = React.useRef(hasActiveTopology);
+  React.useEffect(() => {
+    const becameActive = !previousHasActiveTopology.current && hasActiveTopology;
+    previousHasActiveTopology.current = hasActiveTopology;
+
+    if (!becameActive || !panelVisibility.isContextPanelOpen) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      useCanvasStore.getState().requestFitView();
+    }, 280);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [hasActiveTopology, panelVisibility.isContextPanelOpen]);
 
   const handleLinkLabelModeChange = React.useCallback(
     (mode: Parameters<typeof topoActions.setLinkLabelMode>[0]) => {
@@ -1444,6 +1534,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           runtimeRef={annotationRuntimeRef}
         />
         <Navbar
+          hasActiveTopology={hasActiveTopology}
           onZoomToFit={handleZoomToFit}
           layout={layoutControls.layout}
           onLayoutChange={layoutControls.setLayout}
@@ -1506,125 +1597,127 @@ export const AppContent: React.FC<AppContentProps> = ({
               />
             </Box>
           )}
-          <ContextPanel
-            isOpen={panelVisibility.isContextPanelOpen}
-            side={panelVisibility.panelSide}
-            onOpen={panelVisibility.handleOpenContextPanel}
-            onClose={panelVisibility.handleCloseContextPanel}
-            onBack={handleContextPanelBack}
-            onToggleSide={panelVisibility.handleTogglePanelSide}
-            rfInstance={rfInstance}
-            palette={{
-              mode: state.mode,
-              requestedTab: paletteTabRequest,
+          {hasActiveTopology && (
+            <ContextPanel
+              isOpen={panelVisibility.isContextPanelOpen}
+              side={panelVisibility.panelSide}
+              onOpen={panelVisibility.handleOpenContextPanel}
+              onClose={panelVisibility.handleCloseContextPanel}
+              onBack={handleContextPanelBack}
+              onToggleSide={panelVisibility.handleTogglePanelSide}
+              rfInstance={rfInstance}
+              palette={{
+                mode: state.mode,
+                requestedTab: paletteTabRequest,
 
-              onEditCustomNode: customNodeCommands.onEditCustomNode,
-              onDeleteCustomNode: customNodeCommands.onDeleteCustomNode,
-              onSetDefaultCustomNode: customNodeCommands.onSetDefaultCustomNode
-            }}
-            view={{
-              selectedNodeData: selectionData.selectedNodeData,
-              selectedLinkData: selectionData.selectedLinkData
-            }}
-            editor={{
-              editingNodeData: selectionData.editingNodeData,
-              editingNodeInheritedProps: selectionData.editingNodeInheritedProps,
-              selectedNodeVisualData: enableSelectedNodeVisualEditor
-                ? selectionData.selectedNodeEditorData
-                : null,
-              selectedNodeVisualInheritedProps: enableSelectedNodeVisualEditor
-                ? selectionData.selectedNodeInheritedProps
-                : [],
-              enableSelectedNodeVisualEditor,
-              nodeEditorHandlers: {
-                handleClose: nodeEditorHandlers.handleClose,
-                handleSave: nodeEditorHandlers.handleSave,
-                handleApply: nodeEditorHandlers.handleApply,
-                previewVisuals: nodeEditorHandlers.previewVisuals,
-                handleDelete: selectionData.editingNodeData
-                  ? () => graphHandlers.handleDeleteNode(selectionData.editingNodeData!.id)
-                  : undefined
-              },
-              editingLinkData: selectionData.editingLinkData,
-              linkEditorHandlers: {
-                handleClose: linkEditorHandlers.handleClose,
-                handleSave: linkEditorHandlers.handleSave,
-                handleApply: linkEditorHandlers.handleApply,
-                previewOffset: linkEditorHandlers.previewOffset,
-                revertOffset: linkEditorHandlers.revertOffset,
-                handleDelete: selectionData.editingLinkData
-                  ? () => graphHandlers.handleDeleteLink(selectionData.editingLinkData!.id)
-                  : undefined
-              },
-              editingNetworkData: selectionData.editingNetworkData,
-              networkEditorHandlers: {
-                handleClose: networkEditorHandlers.handleClose,
-                handleSave: handleNetworkSave,
-                handleApply: handleNetworkApply
-              },
-              linkImpairmentData: selectionData.selectedLinkImpairmentData,
-              linkImpairmentHandlers: {
-                onError: handleLinkImpairmentError,
-                onApply: handleLinkImpairmentApply,
-                onSave: handleLinkImpairmentSave,
-                onClose: () => topoActions.editImpairment(null)
-              },
-              editingTextAnnotation: annotationUiState.editingTextAnnotation,
-              textAnnotationHandlers: {
-                onSave: annotationActions.saveTextAnnotation,
-                onPreview: (annotation) => {
-                  const exists =
-                    annotationRuntimeRef.current?.textAnnotations.some(
-                      (entry) => entry.id === annotation.id
-                    ) ?? false;
-                  if (exists) {
-                    annotationActions.updateTextAnnotation(annotation.id, annotation);
-                    return true;
-                  }
-                  annotationActions.previewTextAnnotation(annotation);
-                  return false;
+                onEditCustomNode: customNodeCommands.onEditCustomNode,
+                onDeleteCustomNode: customNodeCommands.onDeleteCustomNode,
+                onSetDefaultCustomNode: customNodeCommands.onSetDefaultCustomNode
+              }}
+              view={{
+                selectedNodeData: selectionData.selectedNodeData,
+                selectedLinkData: selectionData.selectedLinkData
+              }}
+              editor={{
+                editingNodeData: selectionData.editingNodeData,
+                editingNodeInheritedProps: selectionData.editingNodeInheritedProps,
+                selectedNodeVisualData: enableSelectedNodeVisualEditor
+                  ? selectionData.selectedNodeEditorData
+                  : null,
+                selectedNodeVisualInheritedProps: enableSelectedNodeVisualEditor
+                  ? selectionData.selectedNodeInheritedProps
+                  : [],
+                enableSelectedNodeVisualEditor,
+                nodeEditorHandlers: {
+                  handleClose: nodeEditorHandlers.handleClose,
+                  handleSave: nodeEditorHandlers.handleSave,
+                  handleApply: nodeEditorHandlers.handleApply,
+                  previewVisuals: nodeEditorHandlers.previewVisuals,
+                  handleDelete: selectionData.editingNodeData
+                    ? () => graphHandlers.handleDeleteNode(selectionData.editingNodeData!.id)
+                    : undefined
                 },
-                onPreviewDelete: annotationActions.removePreviewTextAnnotation,
-                onClose: annotationUiActions.closeTextEditor,
-                onDelete: annotationActions.deleteTextAnnotation
-              },
-              editingShapeAnnotation: annotationUiState.editingShapeAnnotation,
-              shapeAnnotationHandlers: {
-                onSave: annotationActions.saveShapeAnnotation,
-                onPreview: (annotation) => {
-                  const exists =
-                    annotationRuntimeRef.current?.shapeAnnotations.some(
-                      (entry) => entry.id === annotation.id
-                    ) ?? false;
-                  if (exists) {
-                    annotationActions.updateShapeAnnotation(annotation.id, annotation);
-                    return true;
-                  }
-                  annotationActions.previewShapeAnnotation(annotation);
-                  return false;
+                editingLinkData: selectionData.editingLinkData,
+                linkEditorHandlers: {
+                  handleClose: linkEditorHandlers.handleClose,
+                  handleSave: linkEditorHandlers.handleSave,
+                  handleApply: linkEditorHandlers.handleApply,
+                  previewOffset: linkEditorHandlers.previewOffset,
+                  revertOffset: linkEditorHandlers.revertOffset,
+                  handleDelete: selectionData.editingLinkData
+                    ? () => graphHandlers.handleDeleteLink(selectionData.editingLinkData!.id)
+                    : undefined
                 },
-                onPreviewDelete: annotationActions.removePreviewShapeAnnotation,
-                onClose: annotationUiActions.closeShapeEditor,
-                onDelete: annotationActions.deleteShapeAnnotation
-              },
-              editingTrafficRateAnnotation: annotationUiState.editingTrafficRateAnnotation,
-              trafficRateAnnotationHandlers: {
-                onSave: annotationActions.saveTrafficRateAnnotation,
-                onPreview: (annotation) => {
-                  annotationActions.updateTrafficRateAnnotation(annotation.id, annotation);
+                editingNetworkData: selectionData.editingNetworkData,
+                networkEditorHandlers: {
+                  handleClose: networkEditorHandlers.handleClose,
+                  handleSave: handleNetworkSave,
+                  handleApply: handleNetworkApply
                 },
-                onClose: annotationUiActions.closeTrafficRateEditor,
-                onDelete: annotationActions.deleteTrafficRateAnnotation
-              },
-              editingGroup: annotationUiState.editingGroup,
-              groupHandlers: {
-                onSave: annotationActions.saveGroup,
-                onClose: annotationUiActions.closeGroupEditor,
-                onDelete: annotationActions.deleteGroup,
-                onStylePreview: annotationActions.updateGroup
-              }
-            }}
-          />
+                linkImpairmentData: selectionData.selectedLinkImpairmentData,
+                linkImpairmentHandlers: {
+                  onError: handleLinkImpairmentError,
+                  onApply: handleLinkImpairmentApply,
+                  onSave: handleLinkImpairmentSave,
+                  onClose: () => topoActions.editImpairment(null)
+                },
+                editingTextAnnotation: annotationUiState.editingTextAnnotation,
+                textAnnotationHandlers: {
+                  onSave: annotationActions.saveTextAnnotation,
+                  onPreview: (annotation) => {
+                    const exists =
+                      annotationRuntimeRef.current?.textAnnotations.some(
+                        (entry) => entry.id === annotation.id
+                      ) ?? false;
+                    if (exists) {
+                      annotationActions.updateTextAnnotation(annotation.id, annotation);
+                      return true;
+                    }
+                    annotationActions.previewTextAnnotation(annotation);
+                    return false;
+                  },
+                  onPreviewDelete: annotationActions.removePreviewTextAnnotation,
+                  onClose: annotationUiActions.closeTextEditor,
+                  onDelete: annotationActions.deleteTextAnnotation
+                },
+                editingShapeAnnotation: annotationUiState.editingShapeAnnotation,
+                shapeAnnotationHandlers: {
+                  onSave: annotationActions.saveShapeAnnotation,
+                  onPreview: (annotation) => {
+                    const exists =
+                      annotationRuntimeRef.current?.shapeAnnotations.some(
+                        (entry) => entry.id === annotation.id
+                      ) ?? false;
+                    if (exists) {
+                      annotationActions.updateShapeAnnotation(annotation.id, annotation);
+                      return true;
+                    }
+                    annotationActions.previewShapeAnnotation(annotation);
+                    return false;
+                  },
+                  onPreviewDelete: annotationActions.removePreviewShapeAnnotation,
+                  onClose: annotationUiActions.closeShapeEditor,
+                  onDelete: annotationActions.deleteShapeAnnotation
+                },
+                editingTrafficRateAnnotation: annotationUiState.editingTrafficRateAnnotation,
+                trafficRateAnnotationHandlers: {
+                  onSave: annotationActions.saveTrafficRateAnnotation,
+                  onPreview: (annotation) => {
+                    annotationActions.updateTrafficRateAnnotation(annotation.id, annotation);
+                  },
+                  onClose: annotationUiActions.closeTrafficRateEditor,
+                  onDelete: annotationActions.deleteTrafficRateAnnotation
+                },
+                editingGroup: annotationUiState.editingGroup,
+                groupHandlers: {
+                  onSave: annotationActions.saveGroup,
+                  onClose: annotationUiActions.closeGroupEditor,
+                  onDelete: annotationActions.deleteGroup,
+                  onStylePreview: annotationActions.updateGroup
+                }
+              }}
+            />
+          )}
           <Box
             component="main"
             sx={{

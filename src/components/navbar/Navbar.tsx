@@ -67,6 +67,7 @@ function getToolbarAnchorPosition(
 }
 
 export interface NavbarProps {
+  hasActiveTopology?: boolean;
   onZoomToFit?: () => void;
   layout: LayoutOption;
   onLayoutChange: (layout: LayoutOption) => void;
@@ -98,6 +99,7 @@ export interface NavbarProps {
 // This is a UI composition component with lots of conditional rendering and menu wiring.
 /* eslint-disable complexity */
 export const Navbar: React.FC<NavbarProps> = ({
+  hasActiveTopology = true,
   onZoomToFit,
   layout,
   onLayoutChange,
@@ -120,6 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   linkLabelMode,
   onLinkLabelModeChange
 }) => {
+  const isTopologyActive = hasActiveTopology;
   const mode = useMode();
   const labName = useLabName();
   const isLocked = useIsLocked();
@@ -138,11 +141,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const linkLabelMenuOpen = Boolean(linkLabelMenuPosition);
 
   const handleLinkLabelClick = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!isTopologyActive) return;
     const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
     if (anchorPosition) {
       setLinkLabelMenuPosition(anchorPosition);
     }
-  }, []);
+  }, [isTopologyActive]);
 
   const handleLinkLabelClose = React.useCallback(() => {
     setLinkLabelMenuPosition(null);
@@ -164,11 +168,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const deployMenuOpen = Boolean(deployMenuPosition);
 
   const handleDeployMenuOpen = React.useCallback((event: React.MouseEvent<HTMLElement>) => {
+    if (!isTopologyActive) return;
     const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
     if (anchorPosition) {
       setDeployMenuPosition(anchorPosition);
     }
-  }, []);
+  }, [isTopologyActive]);
 
   const handleDeployMenuClose = React.useCallback(() => {
     setDeployMenuPosition(null);
@@ -210,12 +215,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   // Primary action depends on mode
   const handlePrimaryAction = React.useCallback(() => {
+    if (!isTopologyActive) return;
     if (isViewerMode) {
       handleDestroy();
     } else {
       handleDeploy();
     }
-  }, [isViewerMode, handleDestroy, handleDeploy]);
+  }, [isTopologyActive, isViewerMode, handleDestroy, handleDeploy]);
 
   const [layoutMenuPosition, setLayoutMenuPosition] = React.useState<{
     top: number;
@@ -224,11 +230,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const layoutMenuOpen = Boolean(layoutMenuPosition);
 
   const handleLayoutClick = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!isTopologyActive) return;
     const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
     if (anchorPosition) {
       setLayoutMenuPosition(anchorPosition);
     }
-  }, []);
+  }, [isTopologyActive]);
 
   const handleLayoutClose = React.useCallback(() => {
     setLayoutMenuPosition(null);
@@ -244,13 +251,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleFindNodeClick = React.useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (!isTopologyActive) return;
       const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
       if (anchorPosition) {
         onFindNode?.(anchorPosition);
       }
     },
-    [onFindNode]
+    [isTopologyActive, onFindNode]
   );
+
+  React.useEffect(() => {
+    if (isTopologyActive) return;
+    setDeployMenuPosition(null);
+    setLayoutMenuPosition(null);
+    setLinkLabelMenuPosition(null);
+  }, [isTopologyActive]);
 
   return (
     <AppBar
@@ -283,7 +298,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <IconButton
             size="small"
             onClick={handlePrimaryAction}
-            disabled={isProcessing}
+            disabled={isProcessing || !isTopologyActive}
             sx={{ color: isViewerMode ? ERROR_MAIN : SUCCESS_MAIN }}
             data-testid="navbar-deploy"
           >
@@ -293,7 +308,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <IconButton
           size="small"
           onClick={handleDeployMenuOpen}
-          disabled={isProcessing}
+          disabled={isProcessing || !isTopologyActive}
           aria-controls={deployMenuOpen ? "deploy-split-menu" : undefined}
           aria-haspopup="true"
           aria-expanded={deployMenuOpen ? "true" : undefined}
@@ -388,7 +403,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <IconButton
             size="small"
             onClick={toggleLock}
-            disabled={isProcessing}
+            disabled={isProcessing || !isTopologyActive}
             sx={{ color: isLocked ? ERROR_MAIN : "inherit" }}
             data-testid="navbar-lock"
           >
@@ -398,7 +413,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Lab Settings */}
         <Tooltip title="Lab Settings">
-          <IconButton size="small" onClick={onLabSettings} data-testid="navbar-lab-settings">
+          <IconButton
+            size="small"
+            onClick={onLabSettings}
+            disabled={!isTopologyActive}
+            data-testid="navbar-lab-settings"
+          >
             <SettingsIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -410,7 +430,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <IconButton
                 size="small"
                 onClick={onUndo}
-                disabled={!canUndo}
+                disabled={!isTopologyActive || !canUndo}
                 data-testid="navbar-undo"
               >
                 <UndoIcon fontSize="small" />
@@ -426,7 +446,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <IconButton
                 size="small"
                 onClick={onRedo}
-                disabled={!canRedo}
+                disabled={!isTopologyActive || !canRedo}
                 data-testid="navbar-redo"
               >
                 <RedoIcon fontSize="small" />
@@ -444,7 +464,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <IconButton
                 size="small"
                 onClick={onShowBulkLink}
-                disabled={isLocked}
+                disabled={!isTopologyActive || isLocked}
                 data-testid="navbar-bulk-link"
               >
                 <LinkIcon fontSize="small" />
@@ -455,21 +475,36 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Fit to Viewport */}
         <Tooltip title="Fit to Viewport">
-          <IconButton size="small" onClick={onZoomToFit} data-testid="navbar-fit-viewport">
+          <IconButton
+            size="small"
+            onClick={onZoomToFit}
+            disabled={!isTopologyActive}
+            data-testid="navbar-fit-viewport"
+          >
             <FitScreenIcon fontSize="small" />
           </IconButton>
         </Tooltip>
 
         {/* Toggle YAML Split View */}
         <Tooltip title="Toggle YAML Split View">
-          <IconButton size="small" onClick={onToggleSplit} data-testid="navbar-split-view">
+          <IconButton
+            size="small"
+            onClick={onToggleSplit}
+            disabled={!isTopologyActive}
+            data-testid="navbar-split-view"
+          >
             <ViewColumnIcon fontSize="small" />
           </IconButton>
         </Tooltip>
 
         {/* Layout Manager */}
         <Tooltip title="Layout">
-          <IconButton size="small" onClick={handleLayoutClick} data-testid="navbar-layout">
+          <IconButton
+            size="small"
+            onClick={handleLayoutClick}
+            disabled={!isTopologyActive}
+            data-testid="navbar-layout"
+          >
             <AccountTreeIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -496,14 +531,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Find Node */}
         <Tooltip title="Find Node">
-          <IconButton size="small" onClick={handleFindNodeClick} data-testid="navbar-find-node">
+          <IconButton
+            size="small"
+            onClick={handleFindNodeClick}
+            disabled={!isTopologyActive}
+            data-testid="navbar-find-node"
+          >
             <SearchIcon fontSize="small" />
           </IconButton>
         </Tooltip>
 
         {/* Link Labels Dropdown */}
         <Tooltip title="Link Labels">
-          <IconButton size="small" onClick={handleLinkLabelClick} data-testid="navbar-link-labels">
+          <IconButton
+            size="small"
+            onClick={handleLinkLabelClick}
+            disabled={!isTopologyActive}
+            data-testid="navbar-link-labels"
+          >
             <LabelIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -545,7 +590,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Capture Viewport */}
         <Tooltip title="Capture Viewport as SVG">
-          <IconButton size="small" onClick={onCaptureViewport} data-testid="navbar-capture">
+          <IconButton
+            size="small"
+            onClick={onCaptureViewport}
+            disabled={!isTopologyActive}
+            data-testid="navbar-capture"
+          >
             <PhotoCameraBackIcon fontSize="small" />
           </IconButton>
         </Tooltip>

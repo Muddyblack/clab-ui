@@ -72,6 +72,7 @@ const QUADRATIC_GRID_SIZE = 40;
 const DEFAULT_GRID_LINE_WIDTH = 0.5;
 const MIN_ZOOM = 0.1;
 const MAX_FIT_ZOOM = 2;
+type ViewportState = { x: number; y: number; zoom: number };
 
 /** Hook for wrapped node click handling */
 function resolveAltDeleteHandler(
@@ -362,6 +363,14 @@ function hasFiniteViewport(viewport: { x: number; y: number; zoom: number }): bo
   return (
     Number.isFinite(viewport.x) && Number.isFinite(viewport.y) && Number.isFinite(viewport.zoom)
   );
+}
+
+function normalizeTopologyViewportKey(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // ============================================================================
@@ -1009,6 +1018,7 @@ const ReactFlowCanvasInner = forwardRef<ReactFlowCanvasRef, ReactFlowCanvasProps
     {
       nodes: propNodes,
       edges: propEdges,
+      topologyViewportKey,
       isContextPanelOpen = false,
       layout = "preset",
       isGeoLayout = false,
@@ -1061,6 +1071,13 @@ const ReactFlowCanvasInner = forwardRef<ReactFlowCanvasRef, ReactFlowCanvasProps
     const areNodesInitialized = useNodesInitialized({ includeHiddenNodes: false });
     const { getNodesBounds } = useReactFlow<Node, Edge>();
     const suppressSelectionSyncUntilRef = useRef(0);
+    const viewportByTopologyKeyRef = useRef<Map<string, ViewportState>>(new Map());
+    const previousTopologyViewportKeyRef = useRef<string | null>(null);
+    const pendingRestoreViewportRef = useRef<{ key: string; viewport: ViewportState } | null>(null);
+    const normalizedTopologyViewportKey = useMemo(
+      () => normalizeTopologyViewportKey(topologyViewportKey),
+      [topologyViewportKey]
+    );
 
     const topoState = useMemo(() => ({ mode, isLocked }), [mode, isLocked]);
 
@@ -1075,6 +1092,34 @@ const ReactFlowCanvasInner = forwardRef<ReactFlowCanvasRef, ReactFlowCanvasProps
       () => allNodes.reduce((count, node) => (node.hidden === true ? count : count + 1), 0),
       [allNodes]
     );
+
+    useEffect(() => {
+      const previousKey = previousTopologyViewportKeyRef.current;
+      const instance = reactFlowInstanceRef.current;
+      if (instance && previousKey) {
+        viewportByTopologyKeyRef.current.set(previousKey, instance.getViewport());
+      }
+
+      previousTopologyViewportKeyRef.current = normalizedTopologyViewportKey;
+      if (!normalizedTopologyViewportKey) {
+        pendingRestoreViewportRef.current = null;
+        return;
+      }
+      const savedViewport = viewportByTopologyKeyRef.current.get(normalizedTopologyViewportKey);
+      pendingRestoreViewportRef.current = savedViewport
+        ? { key: normalizedTopologyViewportKey, viewport: savedViewport }
+        : null;
+    }, [normalizedTopologyViewportKey]);
+
+    useEffect(() => {
+      return () => {
+        const activeKey = previousTopologyViewportKeyRef.current;
+        const instance = reactFlowInstanceRef.current;
+        if (instance && activeKey) {
+          viewportByTopologyKeyRef.current.set(activeKey, instance.getViewport());
+        }
+      };
+    }, []);
 
     const handleEdgeCreatedWithContextPanel = useCallback(
       (
@@ -1258,6 +1303,61 @@ const ReactFlowCanvasInner = forwardRef<ReactFlowCanvasRef, ReactFlowCanvasProps
       isGeoLayout,
       isReactFlowReady,
       areNodesInitialized
+    ]);
+
+    useEffect(() => {
+      const pendingRestore = pendingRestoreViewportRef.current;
+      if (!pendingRestore) {
+        return;
+      }
+      if (pendingRestore.key !== normalizedTopologyViewportKey) {
+        return;
+      }
+      if (
+        isGeoLayout ||
+        !isReactFlowReady ||
+        !areNodesInitialized ||
+        visibleNodeCount <= 0 ||
+        !reactFlowInstanceRef.current
+      ) {
+        return;
+      }
+
+      let cancelled = false;
+      const runRestore = () => {
+        if (cancelled) {
+          return;
+        }
+        const nextPending = pendingRestoreViewportRef.current;
+        if (!nextPending || nextPending.key !== pendingRestore.key) {
+          return;
+        }
+        void reactFlowInstanceRef.current
+          ?.setViewport(nextPending.viewport, { duration: 0 })
+          .then(() => {
+            if (cancelled) {
+              return;
+            }
+            const latestPending = pendingRestoreViewportRef.current;
+            if (latestPending?.key === nextPending.key) {
+              pendingRestoreViewportRef.current = null;
+            }
+          })
+          .catch(() => {
+            // Ignore viewport restore errors and keep current viewport.
+          });
+      };
+
+      window.requestAnimationFrame(runRestore);
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      normalizedTopologyViewportKey,
+      isGeoLayout,
+      isReactFlowReady,
+      areNodesInitialized,
+      visibleNodeCount
     ]);
 
     // Refs for context menu (to avoid re-renders)
@@ -1585,6 +1685,15 @@ const ReactFlowCanvasInner = forwardRef<ReactFlowCanvasRef, ReactFlowCanvasProps
       event.preventDefault();
     }, []);
 
+    const handleViewportMoveEnd = useCallback(() => {
+      const topologyKey = normalizedTopologyViewportKey;
+      const instance = reactFlowInstanceRef.current;
+      if (!topologyKey || !instance) {
+        return;
+      }
+      viewportByTopologyKeyRef.current.set(topologyKey, instance.getViewport());
+    }, [normalizedTopologyViewportKey]);
+
     return (
       <div
         ref={canvasContainerRef}
@@ -1616,6 +1725,7 @@ const ReactFlowCanvasInner = forwardRef<ReactFlowCanvasRef, ReactFlowCanvasProps
           onEdgeContextMenu={handlers.onEdgeContextMenu}
           onPaneClick={wrappedOnPaneClick}
           onPaneContextMenu={handlers.onPaneContextMenu}
+          onMoveEnd={handleViewportMoveEnd}
           onConnect={handlers.onConnect}
           onSelectionChange={handlers.onSelectionChange}
           connectionLineComponent={CustomConnectionLine}
