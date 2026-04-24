@@ -317,8 +317,12 @@ function shouldCollectDevMockTrafficStats(
   return true;
 }
 
-function shouldShowBulkLinkModal(isRequested: boolean, isProcessing: boolean): boolean {
-  return isRequested && !isProcessing;
+function shouldShowBulkLinkModal(
+  hasActiveTopology: boolean,
+  isRequested: boolean,
+  isProcessing: boolean
+): boolean {
+  return hasActiveTopology && isRequested && !isProcessing;
 }
 
 function hasActiveTopologySession(
@@ -1460,7 +1464,8 @@ export const AppContent: React.FC<AppContentProps> = ({
     setPaletteTabRequest({ tabId: "yaml" });
   }, [hasActiveTopology, panelVisibility]);
   const isBulkLinkModalOpen = shouldShowBulkLinkModal(
-    hasActiveTopology && panelVisibility.showBulkLinkModal,
+    hasActiveTopology,
+    panelVisibility.showBulkLinkModal,
     isProcessing
   );
 
