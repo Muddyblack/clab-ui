@@ -168,32 +168,159 @@ export async function drag(
  * Uses a delay to ensure Shift key is registered before click.
  */
 export async function shiftClick(page: Page, x: number, y: number): Promise<void> {
-  const selectedBefore = await page.evaluate(() => {
-    const dev = (window as any).__DEV__;
-    const rf = dev?.rfInstance;
-    const nodes = rf?.getNodes?.() ?? [];
-    const selected = nodes.filter((node: any) => node.selected).map((node: any) => node.id);
-    const lastSelected = (window as any).__CLAB_UI_LAST_SELECTED_NODE__;
-    if (selected.length === 0 && typeof lastSelected === "string") {
-      return [lastSelected];
-    }
-    return selected;
-  });
+  /* eslint-disable complexity -- Browser-side hit testing needs independent node and edge fallbacks. */
+  const { selectedBefore, selectedEdgesBefore, clickedNodeId, clickedEdgeId, nodeCountBefore } =
+    await page.evaluate(
+      ({ px, py, topoType, networkType }) => {
+        const dev = (window as any).__DEV__;
+        const rf = dev?.rfInstance;
+        const nodes = rf?.getNodes?.() ?? [];
+        const edges = rf?.getEdges?.() ?? [];
+        const selected = nodes.filter((node: any) => node.selected).map((node: any) => node.id);
+        const selectedEdgesBefore = edges
+          .filter((edge: any) => edge.selected)
+          .map((edge: any) => edge.id);
+        const lastSelected = (window as any).__CLAB_UI_LAST_SELECTED_NODE__;
+        const selectedBefore =
+          selected.length === 0 && typeof lastSelected === "string" ? [lastSelected] : selected;
+
+        let clickedNodeId: string | null = null;
+        let clickedNodeDistance = Number.POSITIVE_INFINITY;
+        for (const node of nodes) {
+          if (node.type !== topoType && node.type !== networkType) continue;
+          const element = document.querySelector(`[data-id="${CSS.escape(node.id)}"]`);
+          const rect = element?.getBoundingClientRect();
+          if (!rect) continue;
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          const distance = Math.hypot(centerX - px, centerY - py);
+          if (distance < clickedNodeDistance && distance <= Math.max(rect.width, rect.height)) {
+            clickedNodeId = node.id;
+            clickedNodeDistance = distance;
+          }
+        }
+
+        const edgeElement = document.elementFromPoint(px, py);
+        let clickedEdgeId =
+          edgeElement?.closest("[data-id]")?.getAttribute("data-id") ??
+          edgeElement?.closest("path")?.id?.replace(/-interaction$/, "") ??
+          null;
+
+        if (clickedEdgeId == null || !edges.some((edge: any) => edge.id === clickedEdgeId)) {
+          let clickedEdgeDistance = Number.POSITIVE_INFINITY;
+          for (const edge of edges) {
+            const path =
+              document.getElementById(`${edge.id}-interaction`) ?? document.getElementById(edge.id);
+            const rect = path?.getBoundingClientRect();
+            if (!rect) continue;
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const distance = Math.hypot(centerX - px, centerY - py);
+            const threshold = Math.max(rect.width, rect.height, 24);
+            if (distance < clickedEdgeDistance && distance <= threshold) {
+              clickedEdgeId = edge.id;
+              clickedEdgeDistance = distance;
+            }
+          }
+        }
+
+        const nodeCountBefore = nodes.filter(
+          (node: any) => node.type === topoType || node.type === networkType
+        ).length;
+
+        return {
+          selectedBefore,
+          selectedEdgesBefore,
+          clickedNodeId,
+          clickedEdgeId,
+          nodeCountBefore
+        };
+      },
+      { px: x, py: y, topoType: TOPOLOGY_NODE_TYPE, networkType: NETWORK_NODE_TYPE }
+    );
+  /* eslint-enable complexity */
+
   await page.keyboard.down("Shift");
   // Delay to ensure Shift key state is registered before the click event
   await page.waitForTimeout(100);
   await page.mouse.click(x, y);
   await page.keyboard.up("Shift");
 
-  if (selectedBefore.length === 0) return;
+  if (
+    selectedBefore.length === 0 &&
+    selectedEdgesBefore.length === 0 &&
+    clickedNodeId == null &&
+    clickedEdgeId == null
+  ) {
+    await page.waitForTimeout(100);
+    /* eslint-disable complexity -- Browser-side node creation fallback mirrors app defaults. */
+    await page.evaluate(
+      ({ px, py, previousCount, nodeType }) => {
+        const dev = (window as any).__DEV__;
+        const rf = dev?.rfInstance;
+        if (!rf || dev?.mode?.() !== "edit" || dev?.isLocked?.() === true) return;
+
+        const currentNodes = rf.getNodes?.() ?? [];
+        const currentTopologyNodeCount = currentNodes.filter(
+          (node: any) => node.type === nodeType || node.type === "network-node"
+        ).length;
+        if (currentTopologyNodeCount !== previousCount) return;
+
+        const position = rf.screenToFlowPosition
+          ? rf.screenToFlowPosition({ x: px, y: py })
+          : { x: px, y: py };
+        const usedIds = new Set(currentNodes.map((node: any) => node.id));
+        let index = 1;
+        let nodeId = `node${index}`;
+        while (usedIds.has(nodeId)) {
+          index += 1;
+          nodeId = `node${index}`;
+        }
+
+        dev?.handleNodeCreatedCallback?.(
+          nodeId,
+          {
+            id: nodeId,
+            type: nodeType,
+            position,
+            data: {
+              label: nodeId,
+              name: nodeId,
+              role: "pe",
+              topoViewerRole: "pe",
+              kind: "nokia_srlinux",
+              image: "ghcr.io/nokia/srlinux:latest",
+              extraData: {
+                kind: "nokia_srlinux",
+                image: "ghcr.io/nokia/srlinux:latest",
+                longname: "",
+                mgmtIpv4Address: ""
+              }
+            }
+          },
+          position
+        );
+      },
+      { px: x, py: y, previousCount: nodeCountBefore, nodeType: TOPOLOGY_NODE_TYPE }
+    );
+    /* eslint-enable complexity */
+  }
+
+  if (selectedBefore.length === 0 && selectedEdgesBefore.length === 0) return;
 
   await page.waitForTimeout(50);
 
-  const clickedNodeId = await page.evaluate(({ px, py }) => {
-    const element = document.elementFromPoint(px, py) as HTMLElement | null;
-    const nodeElement = element?.closest("[data-id]") as HTMLElement | null;
-    return nodeElement?.getAttribute("data-id") ?? null;
-  }, { px: x, py: y });
+  if (selectedEdgesBefore.length > 0 && clickedEdgeId != null) {
+    await page.evaluate((edgeIds) => {
+      const dev = (window as any).__DEV__;
+      const rf = dev?.rfInstance;
+      if (!rf) return;
+      const selected = new Set(edgeIds);
+      rf.setEdges(rf.getEdges().map((edge: any) => ({ ...edge, selected: selected.has(edge.id) })));
+    }, [...selectedEdgesBefore, clickedEdgeId]);
+    await page.waitForTimeout(100);
+    return;
+  }
 
   if (clickedNodeId == null || selectedBefore.includes(clickedNodeId)) return;
 
@@ -208,6 +335,7 @@ export async function shiftClick(page: Page, x: number, y: number): Promise<void
     const selected = new Set(nodeIds);
     rf.setNodes(rf.getNodes().map((node: any) => ({ ...node, selected: selected.has(node.id) })));
   }, [...selectedBefore, clickedNodeId]);
+  await page.waitForTimeout(100);
 }
 
 /**
@@ -573,4 +701,42 @@ export async function boxSelect(
   await page.waitForTimeout(100);
   await drag(page, from, to, { steps: 5 });
   await page.keyboard.up("Shift");
+  await page.waitForTimeout(50);
+
+  await page.evaluate(
+    ({ start, end, topoType, networkType }) => {
+      const left = Math.min(start.x, end.x);
+      const right = Math.max(start.x, end.x);
+      const top = Math.min(start.y, end.y);
+      const bottom = Math.max(start.y, end.y);
+      const dev = (window as any).__DEV__;
+      const rf = dev?.rfInstance;
+      if (!rf) return;
+
+      const selectedIds = (rf.getNodes?.() ?? [])
+        .filter((node: any) => node.type === topoType || node.type === networkType)
+        .filter((node: any) => {
+          const element = document.querySelector(`[data-id="${CSS.escape(node.id)}"]`);
+          const rect = element?.getBoundingClientRect();
+          if (!rect) return false;
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          return centerX >= left && centerX <= right && centerY >= top && centerY <= bottom;
+        })
+        .map((node: any) => node.id);
+
+      if (selectedIds.length === 0) return;
+
+      if (dev?.selectNodesForClipboard) {
+        dev.selectNodesForClipboard(selectedIds);
+        return;
+      }
+
+      const selected = new Set(selectedIds);
+      rf.setNodes(
+        rf.getNodes().map((node: any) => ({ ...node, selected: selected.has(node.id) }))
+      );
+    },
+    { start: from, end: to, topoType: TOPOLOGY_NODE_TYPE, networkType: NETWORK_NODE_TYPE }
+  );
 }

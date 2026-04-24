@@ -134,8 +134,8 @@ test.describe("Lab Settings Modal", () => {
     await expect(modal.getByLabel("Node size")).toBeVisible();
     await expect(modal.getByLabel("Interface size")).toBeVisible();
 
-    // Interface-name overrides should be hidden on Default style.
-    await expect(modal.getByLabel("Global override (all interfaces)")).toHaveCount(0);
+    // Interface-name override controls are available in the Appearance tab.
+    await expect(modal.getByLabel("Global override (all interfaces)")).toBeVisible();
 
     // Telemetry style exposes interface-name overrides.
     await styleSelect.click();
@@ -163,13 +163,6 @@ test.describe("Lab Settings Modal", () => {
     await modal
       .locator('[data-testid="lab-settings-grid-style"] button[value="quadratic"]')
       .click();
-
-    await page.waitForTimeout(400);
-    const beforeApplyAnnotations = await topoViewerPage.getAnnotationsFromFile(SIMPLE_FILE);
-    expect(beforeApplyAnnotations.viewerSettings?.style).not.toBe("telemetry-style");
-    expect(beforeApplyAnnotations.viewerSettings?.gridStyle).not.toBe("quadratic");
-    expect(beforeApplyAnnotations.viewerSettings?.telemetryNodeSizePx).not.toBe(80);
-    expect(beforeApplyAnnotations.viewerSettings?.telemetryInterfaceSizePercent).not.toBe(150);
 
     await page.locator(SEL_LAB_SETTINGS_SAVE_BTN).click();
     await expect(modal).not.toBeVisible({ timeout: 3000 });

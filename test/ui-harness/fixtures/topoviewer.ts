@@ -541,6 +541,10 @@ export const test = base.extend<{ topoViewerPage: TopoViewerPage }>({
       const type = msg.type().toUpperCase().padEnd(7);
       consoleLogs.push(`[${timestamp}] [${type}] ${msg.text()}`);
     });
+    page.on("pageerror", (error) => {
+      const timestamp = new Date().toISOString();
+      consoleLogs.push(`[${timestamp}] [PAGEERROR] ${error.stack ?? error.message}`);
+    });
 
     const navigateToHarness = async (): Promise<void> => {
       const target = `/?sessionId=${sessionId}&devExplorer=0`;
@@ -583,7 +587,7 @@ export const test = base.extend<{ topoViewerPage: TopoViewerPage }>({
 
     const topoViewerPage: TopoViewerPage = {
       gotoFile: async (filename: string) => {
-        await navigateToHarness();
+        await ensureDevApiReady();
 
         // Wait for React Flow instance to be ready.
         await page.waitForFunction(
@@ -1225,13 +1229,19 @@ export const test = base.extend<{ topoViewerPage: TopoViewerPage }>({
       },
 
       getSelectedNodeIds: async () => {
-        return await page.evaluate(() => {
+        return await page.evaluate(
+          (types) => {
           const dev = (window as { __DEV__?: BrowserDevApi }).__DEV__;
           const rf = dev?.rfInstance;
           if (!rf) return [];
           const nodes = rf.getNodes?.() ?? [];
-          return nodes.filter((n) => n.selected === true).map((n) => n.id);
-        });
+          return nodes
+            .filter((n: any) => n.type === types.topo || n.type === types.network)
+            .filter((n: any) => n.selected === true)
+            .map((n: any) => n.id);
+          },
+          { topo: TOPOLOGY_NODE_TYPE, network: NETWORK_NODE_TYPE }
+        );
       },
 
       getSelectedEdgeIds: async () => {

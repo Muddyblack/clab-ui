@@ -76,14 +76,16 @@ export function useSchema(): UseSchemaResult {
       return;
     }
 
-    const kinds = data.kinds;
+    const kinds = Array.isArray(data.kinds) ? data.kinds : [];
     const typesByKind = new Map<string, string[]>();
     const kindsWithTypeSupport = new Set<string>();
 
     // Convert Record to Map and build kindsWithTypeSupport set
-    for (const [kind, types] of Object.entries(data.typesByKind)) {
-      typesByKind.set(kind, types);
-      kindsWithTypeSupport.add(kind);
+    for (const [kind, types] of Object.entries(data.typesByKind ?? {})) {
+      if (Array.isArray(types)) {
+        typesByKind.set(kind, types);
+        kindsWithTypeSupport.add(kind);
+      }
     }
 
     // Get SROS component types

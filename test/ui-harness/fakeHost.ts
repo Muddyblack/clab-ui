@@ -111,6 +111,7 @@ export function createFakeClabUiHost(initialFixture: string | null): FakeClabUiH
   let fs = new MemoryFsAdapter(files);
   let currentYamlPath = toYamlPath(initialFixture);
   let core = createCore(currentYamlPath, fs);
+  const messageSubscribers = new Set<(event: MessageEvent<unknown>) => void>();
   const topoViewerSubscribers = new Set<(event: ClabUiTopoViewerEvent) => void>();
 
   function createCore(yamlFilePath: string, adapter: FileSystemAdapter): TopologySessionCore {
@@ -133,7 +134,9 @@ export function createFakeClabUiHost(initialFixture: string | null): FakeClabUiH
     currentYamlPath = nextYamlPath;
     core.dispose();
     core = createCore(nextYamlPath, fs);
-    return core.getSnapshot();
+    const snapshot = await core.getSnapshot();
+    emitSnapshot(snapshot);
+    return snapshot;
   }
 
   async function resetFiles(): Promise<void> {
@@ -144,6 +147,13 @@ export function createFakeClabUiHost(initialFixture: string | null): FakeClabUiH
 
   function readFileByName(filename: string): string | undefined {
     return files.get(normalizePath(filename));
+  }
+
+  function emitSnapshot(snapshot: TopologySnapshot): void {
+    const event = { data: { type: "topology-host:snapshot", snapshot } } as MessageEvent<unknown>;
+    for (const subscriber of Array.from(messageSubscribers)) {
+      subscriber(event);
+    }
   }
 
   return {
@@ -220,8 +230,11 @@ export function createFakeClabUiHost(initialFixture: string | null): FakeClabUiH
       harnessWindow.__CLAB_UI_HARNESS_MESSAGES__.push(message);
     },
 
-    subscribe(): () => void {
-      return () => {};
+    subscribe(handler: (event: MessageEvent<unknown>) => void): () => void {
+      messageSubscribers.add(handler);
+      return () => {
+        messageSubscribers.delete(handler);
+      };
     },
 
     meta: {
