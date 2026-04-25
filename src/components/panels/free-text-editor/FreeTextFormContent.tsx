@@ -1,13 +1,11 @@
 // Text annotation editor form.
 import React from "react";
-import {
-  FormatAlignCenter as FormatAlignCenterIcon,
-  FormatAlignLeft as FormatAlignLeftIcon,
-  FormatAlignRight as FormatAlignRightIcon,
-  FormatBold as FormatBoldIcon,
-  FormatItalic as FormatItalicIcon,
-  FormatUnderlined as FormatUnderlinedIcon
-} from "@mui/icons-material";
+import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
+import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
+import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+import FormatBoldIcon from "@mui/icons-material/FormatBold";
+import FormatItalicIcon from "@mui/icons-material/FormatItalic";
+import FormatUnderlinedIcon from "@mui/icons-material/FormatUnderlined";
 import {
   Box,
   Checkbox,

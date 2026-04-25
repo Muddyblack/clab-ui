@@ -1,26 +1,24 @@
 // Context menu item builders for ReactFlowCanvas.
 import React from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
-import {
-  Add as AddIcon,
-  Article as ArticleIcon,
-  Category as CategoryIcon,
-  CircleOutlined as CircleOutlinedIcon,
-  Close as CloseIcon,
-  CropSquare as CropSquareIcon,
-  Dashboard as DashboardIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Info as InfoIcon,
-  Lan as LanIcon,
-  Layers as LayersIcon,
-  Link as LinkIcon,
-  Remove as RemoveIcon,
-  Speed as SpeedIcon,
-  Terminal as TerminalIcon,
-  TextFields as TextFieldsIcon,
-  Tune as TuneIcon
-} from "@mui/icons-material";
+import AddIcon from "@mui/icons-material/Add";
+import ArticleIcon from "@mui/icons-material/Article";
+import CategoryIcon from "@mui/icons-material/Category";
+import CircleOutlinedIcon from "@mui/icons-material/CircleOutlined";
+import CloseIcon from "@mui/icons-material/Close";
+import CropSquareIcon from "@mui/icons-material/CropSquare";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import InfoIcon from "@mui/icons-material/Info";
+import LanIcon from "@mui/icons-material/Lan";
+import LayersIcon from "@mui/icons-material/Layers";
+import LinkIcon from "@mui/icons-material/Link";
+import RemoveIcon from "@mui/icons-material/Remove";
+import SpeedIcon from "@mui/icons-material/Speed";
+import TerminalIcon from "@mui/icons-material/Terminal";
+import TextFieldsIcon from "@mui/icons-material/TextFields";
+import TuneIcon from "@mui/icons-material/Tune";
 
 import type { ContextMenuItem } from "../context-menu/ContextMenu";
 import { WiresharkIcon } from "../context-menu/WiresharkIcon";

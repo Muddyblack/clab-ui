@@ -1,11 +1,9 @@
 // Components tab for node editor (Nokia SROS).
 import React, { useCallback, useState } from "react";
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  ExpandLess as ExpandLessIcon,
-  ExpandMore as ExpandMoreIcon
-} from "@mui/icons-material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   Box,
   Button,

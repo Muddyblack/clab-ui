@@ -1,12 +1,10 @@
 // SVG export dialog.
 import React, { useState, useCallback, useMemo } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
-import {
-  AccountTree as AccountTreeIcon,
-  Download as DownloadIcon,
-  Lightbulb as LightbulbIcon,
-  Settings as SettingsIcon
-} from "@mui/icons-material";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import DownloadIcon from "@mui/icons-material/Download";
+import LightbulbIcon from "@mui/icons-material/Lightbulb";
+import SettingsIcon from "@mui/icons-material/Settings";
 import {
   Alert,
   Box,

@@ -35,6 +35,7 @@ import { SvgExportModal } from "./components/panels/SvgExportModal";
 import { BulkLinkModal } from "./components/panels/BulkLinkModal";
 import { FindNodePopover } from "./components/panels/FindNodePopover";
 import { ShortcutDisplay, ToastContainer } from "./components/ui";
+import { preloadMonacoCodeEditor } from "./components/monaco/preloadMonacoCodeEditor";
 import { EasterEggRenderer, useEasterEgg } from "./easter-eggs";
 import {
   useAppEditorBindings,
@@ -726,6 +727,15 @@ export const AppContent: React.FC<AppContentProps> = ({
   useDevMockTrafficStats(shouldCollectDevMockTrafficStats(host, isDevMock, interactionMode));
   const { layoutRef, devExplorerWidth, isDevExplorerDragging, handleDevExplorerResizeStart } =
     useDevExplorerPane(showDevExplorer);
+
+  React.useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      void preloadMonacoCodeEditor();
+    }, 0);
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!shouldDumpCssVars()) return;

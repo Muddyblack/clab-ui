@@ -1,6 +1,7 @@
 // Icon selector modal.
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Close as CloseIcon, Replay as ResetIcon } from "@mui/icons-material";
+import CloseIcon from "@mui/icons-material/Close";
+import ResetIcon from "@mui/icons-material/Replay";
 import {
   Box,
   Button,

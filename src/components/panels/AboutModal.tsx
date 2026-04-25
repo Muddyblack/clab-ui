@@ -13,15 +13,13 @@ import {
   Link,
   Typography
 } from "@mui/material";
-import {
-  Close as CloseIcon,
-  Extension as ExtensionIcon,
-  Favorite as FavoriteIcon,
-  GitHub as GitHubIcon,
-  Groups as GroupsIcon,
-  MenuBook as MenuBookIcon,
-  OpenInNew as OpenInNewIcon
-} from "@mui/icons-material";
+import CloseIcon from "@mui/icons-material/Close";
+import ExtensionIcon from "@mui/icons-material/Extension";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import GitHubIcon from "@mui/icons-material/GitHub";
+import GroupsIcon from "@mui/icons-material/Groups";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 interface AboutModalProps {
   isOpen: boolean;

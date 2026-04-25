@@ -12,30 +12,28 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import {
-  AccountTree as AccountTreeIcon,
-  ExpandMore as ExpandMoreIcon,
-  PhotoCameraBack as PhotoCameraBackIcon,
-  Check as CheckIcon,
-  CleaningServices as CleaningServicesIcon,
-  FitScreen as FitScreenIcon,
-  Info as InfoIcon,
-  Keyboard as KeyboardIcon,
-  Label as LabelIcon,
-  Link as LinkIcon,
-  Lock as LockIcon,
-  LockOpen as LockOpenIcon,
-  PlayArrow as PlayArrowIcon,
-  Redo as RedoIcon,
-  Replay as ReplayIcon,
-  Search as SearchIcon,
-  Settings as SettingsIcon,
-  Stop as StopIcon,
-  Undo as UndoIcon,
-  ViewColumn as ViewColumnIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon
-} from "@mui/icons-material";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import CheckIcon from "@mui/icons-material/Check";
+import CleaningServicesIcon from "@mui/icons-material/CleaningServices";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import FitScreenIcon from "@mui/icons-material/FitScreen";
+import InfoIcon from "@mui/icons-material/Info";
+import KeyboardIcon from "@mui/icons-material/Keyboard";
+import LabelIcon from "@mui/icons-material/Label";
+import LinkIcon from "@mui/icons-material/Link";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
+import PhotoCameraBackIcon from "@mui/icons-material/PhotoCameraBack";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import RedoIcon from "@mui/icons-material/Redo";
+import ReplayIcon from "@mui/icons-material/Replay";
+import SearchIcon from "@mui/icons-material/Search";
+import SettingsIcon from "@mui/icons-material/Settings";
+import StopIcon from "@mui/icons-material/Stop";
+import UndoIcon from "@mui/icons-material/Undo";
+import ViewColumnIcon from "@mui/icons-material/ViewColumn";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 
 import type { LinkLabelMode } from "../../stores/topoViewerStore";
 import {
