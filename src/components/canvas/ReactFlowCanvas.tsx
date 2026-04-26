@@ -719,7 +719,7 @@ function useGeoWheelZoom(
   canvasContainerRef: React.RefObject<HTMLDivElement | null>
 ) {
   useEffect(() => {
-    if (!isGeoLayout || !isGeoEdit) return;
+    if (!isGeoLayout || !isGeoEdit || !geoLayout.isReady) return;
     const map = geoLayout.mapRef.current;
     const container = canvasContainerRef.current;
     if (!map || !container) return;
@@ -752,7 +752,7 @@ function useGeoWheelZoom(
 
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
-  }, [geoLayout.mapRef, isGeoLayout, isGeoEdit, canvasContainerRef]);
+  }, [geoLayout.mapRef, geoLayout.isReady, isGeoLayout, isGeoEdit, canvasContainerRef]);
 }
 
 function useSyncCanvasStore(params: {

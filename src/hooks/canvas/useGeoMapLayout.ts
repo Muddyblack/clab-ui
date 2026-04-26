@@ -915,10 +915,10 @@ export function useGeoMapLayout({
         resetViewport: true
       });
     };
-  }, [isGeoLayout, reactFlowInstanceRef, canvasContainerRef]);
+  }, [isGeoLayout, isReady, reactFlowInstanceRef, canvasContainerRef]);
 
   useEffect(() => {
-    if (!isGeoLayout) return;
+    if (!isGeoLayout || !isReady) return;
     const container = containerRef.current;
     const map = mapRef.current;
     if (!container || !map || typeof ResizeObserver === "undefined") return;
@@ -927,7 +927,7 @@ export function useGeoMapLayout({
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [isGeoLayout]);
+  }, [isGeoLayout, isReady]);
 
   const getGeoCoordinatesForNode = useCallback((node: Node): GeoCoordinates | null => {
     const map = mapRef.current;

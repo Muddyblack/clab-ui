@@ -188,6 +188,92 @@ test.describe("GeoMap Layout", () => {
     }
   });
 
+  test("panning and zooming the map keep nodes anchored to their geo coordinates", async ({
+    page,
+    topoViewerPage
+  }) => {
+    await page.evaluate((layout) => {
+      const dev = (window as any).__DEV__;
+      dev?.setLayout?.(layout);
+    }, GEO_LAYOUT);
+
+    const mapCanvas = page.locator(GEO_MAP_CANVAS_SELECTOR);
+    await mapCanvas.waitFor();
+
+    const testNodeId = "srl1";
+    await expect
+      .poll(() => getNodeGeoFromStore(page, testNodeId), {
+        timeout: 5000,
+        message: "geo coordinates should be assigned before panning"
+      })
+      .not.toBeNull();
+
+    const initialPosition = await topoViewerPage.getNodePosition(testNodeId);
+    const box = await mapCanvas.boundingBox();
+    expect(box).not.toBeNull();
+
+    const start = {
+      x: box!.x + Math.min(160, box!.width * 0.2),
+      y: box!.y + box!.height * 0.4
+    };
+    const end = { x: start.x + 180, y: start.y + 70 };
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(({ x, y }) => {
+            const target = document.elementFromPoint(x, y);
+            return target?.classList.contains("maplibregl-canvas") ?? false;
+          }, start),
+        {
+          timeout: 3000,
+          message: "map pan should start on the MapLibre canvas"
+        }
+      )
+      .toBe(true);
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x, end.y, { steps: 10 });
+    await page.mouse.up();
+
+    await expect
+      .poll(
+        async () => {
+          const nextPosition = await topoViewerPage.getNodePosition(testNodeId);
+          return Math.hypot(
+            nextPosition.x - initialPosition.x,
+            nextPosition.y - initialPosition.y
+          );
+        },
+        {
+          timeout: 5000,
+          message: "node screen position should follow map pan"
+        }
+      )
+      .toBeGreaterThan(50);
+
+    const afterPanPosition = await topoViewerPage.getNodePosition(testNodeId);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.wheel(0, -700);
+
+    await expect
+      .poll(
+        async () => {
+          const nextPosition = await topoViewerPage.getNodePosition(testNodeId);
+          return Math.hypot(
+            nextPosition.x - afterPanPosition.x,
+            nextPosition.y - afterPanPosition.y
+          );
+        },
+        {
+          timeout: 5000,
+          message: "node screen position should follow map zoom"
+        }
+      )
+      .toBeGreaterThan(20);
+  });
+
   test("clicking map background deselects selected nodes and edges", async ({
     page,
     topoViewerPage
