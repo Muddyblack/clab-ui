@@ -3,7 +3,6 @@ import { NodeResizer, type NodeProps, type ResizeParams } from "@xyflow/react";
 
 import type { TrafficRateNodeData } from "../types";
 import { SELECTION_COLOR } from "../types";
-import { TrafficChart } from "../../panels/TrafficChart";
 import { useAnnotationHandlers } from "../../../stores/canvasStore";
 import { useGraphStore } from "../../../stores/graphStore";
 import { useIsLocked } from "../../../stores/topoViewerStore";
@@ -29,6 +28,11 @@ const DEFAULT_BORDER_RADIUS = 8;
 const DEFAULT_BACKGROUND_OPACITY = 20;
 const FALLBACK_TEXT_COLOR = "#9aa0a6";
 const TEXT_BORDER_RADIUS = 4;
+
+const LazyTrafficChart = React.lazy(async () => {
+  const module = await import("../../panels/TrafficChart");
+  return { default: module.TrafficChart };
+});
 
 type TrafficRateMode = "text" | "chart";
 type TrafficRateTextMetric = "combined" | "rx" | "tx";
@@ -181,14 +185,16 @@ function renderTrafficRateBody(params: {
   return (
     <>
       <div style={{ width: "100%", flex: 1, minHeight: 0, overflow: "hidden" }}>
-        <TrafficChart
-          stats={params.resolution.stats}
-          endpointKey={`${params.resolution.endpointKey}:${params.id}`}
-          compact
-          showLegend={params.showLegend}
-          scale={params.scale}
-          emptyMessage={null}
-        />
+        <React.Suspense fallback={null}>
+          <LazyTrafficChart
+            stats={params.resolution.stats}
+            endpointKey={`${params.resolution.endpointKey}:${params.id}`}
+            compact
+            showLegend={params.showLegend}
+            scale={params.scale}
+            emptyMessage={null}
+          />
+        </React.Suspense>
       </div>
       {params.resolution.endpointCount === 0 && (
         <div style={{ fontSize: hintFontSize, color: params.hintColor, flexShrink: 0 }}>

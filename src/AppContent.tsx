@@ -4,7 +4,6 @@ import React from "react";
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
 import Box from "@mui/material/Box";
 
-import { ContainerlabExplorerView } from "./explorer/containerlabExplorerView.webview";
 import type { NetemState } from "./core/parsing";
 import type { TopoEdge, TopoNode, TopologyHostCommand } from "./core/types";
 
@@ -26,16 +25,10 @@ import {
 import type { ReactFlowCanvasRef } from "./components/canvas";
 import { ReactFlowCanvas } from "./components/canvas";
 import { Navbar } from "./components/navbar/Navbar";
-import { AboutModal, type LinkImpairmentData } from "./components/panels";
+import type { LinkImpairmentData } from "./components/panels";
 import { ContextPanel } from "./components/panels/context-panel";
-import { LabSettingsModal } from "./components/panels/lab-settings/LabSettingsModal";
-import { LifecycleProgressModal } from "./components/panels/LifecycleProgressModal";
-import { ShortcutsModal } from "./components/panels/ShortcutsModal";
-import { SvgExportModal } from "./components/panels/SvgExportModal";
-import { BulkLinkModal } from "./components/panels/BulkLinkModal";
-import { FindNodePopover } from "./components/panels/FindNodePopover";
+import type { SvgExportModalProps } from "./components/panels/SvgExportModal";
 import { ShortcutDisplay, ToastContainer } from "./components/ui";
-import { preloadMonacoCodeEditor } from "./components/monaco/preloadMonacoCodeEditor";
 import { EasterEggRenderer, useEasterEgg } from "./easter-eggs";
 import {
   useAppEditorBindings,
@@ -89,6 +82,47 @@ import {
 type LayoutControls = ReturnType<typeof useLayoutControls>;
 const DEV_EXPLORER_MIN_WIDTH = 280;
 const DEV_EXPLORER_DEFAULT_WIDTH = 360;
+const DEV_EXPLORER_DEFER_MS = 300;
+
+const LazyContainerlabExplorerView = React.lazy(async () => {
+  const module = await import("./explorer/containerlabExplorerView.webview");
+  return { default: module.ContainerlabExplorerView };
+});
+
+const LazyLifecycleProgressModal = React.lazy(async () => {
+  const module = await import("./components/panels/LifecycleProgressModal");
+  return { default: module.LifecycleProgressModal };
+});
+
+const LazyLabSettingsModal = React.lazy(async () => {
+  const module = await import("./components/panels/lab-settings/LabSettingsModal");
+  return { default: module.LabSettingsModal };
+});
+
+const LazyShortcutsModal = React.lazy(async () => {
+  const module = await import("./components/panels/ShortcutsModal");
+  return { default: module.ShortcutsModal };
+});
+
+const LazySvgExportModal = React.lazy(async () => {
+  const module = await import("./components/panels/SvgExportModal");
+  return { default: module.SvgExportModal };
+});
+
+const LazyBulkLinkModal = React.lazy(async () => {
+  const module = await import("./components/panels/BulkLinkModal");
+  return { default: module.BulkLinkModal };
+});
+
+const LazyAboutModal = React.lazy(async () => {
+  const module = await import("./components/panels/AboutModal");
+  return { default: module.AboutModal };
+});
+
+const LazyFindNodePopover = React.lazy(async () => {
+  const module = await import("./components/panels/FindNodePopover");
+  return { default: module.FindNodePopover };
+});
 
 const TOPO_NODE_TYPES = new Set<string>([
   "topology-node",
@@ -677,7 +711,7 @@ const AnnotationRuntimeBridge: React.FC<AnnotationRuntimeBridgeProps> = ({
 };
 
 type SvgExportModalContainerProps = Pick<
-  React.ComponentPropsWithoutRef<typeof SvgExportModal>,
+  SvgExportModalProps,
   "onClose" | "rfInstance" | "customIcons" | "labName"
 >;
 
@@ -686,20 +720,53 @@ const SvgExportModalContainer: React.FC<SvgExportModalContainerProps> = React.me
     const { textAnnotations, shapeAnnotations, groups } = useDerivedAnnotations();
 
     return (
-      <SvgExportModal
-        isOpen
-        onClose={onClose}
-        labName={labName}
-        textAnnotations={textAnnotations}
-        shapeAnnotations={shapeAnnotations}
-        groups={groups}
-        rfInstance={rfInstance}
-        customIcons={customIcons}
-      />
+      <React.Suspense fallback={null}>
+        <LazySvgExportModal
+          isOpen
+          onClose={onClose}
+          labName={labName}
+          textAnnotations={textAnnotations}
+          shapeAnnotations={shapeAnnotations}
+          groups={groups}
+          rfInstance={rfInstance}
+          customIcons={customIcons}
+        />
+      </React.Suspense>
     );
   }
 );
 SvgExportModalContainer.displayName = "SvgExportModalContainer";
+
+function DeferredDevExplorerView() {
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    let timerId: number | null = null;
+    const frameId = window.requestAnimationFrame(() => {
+      timerId = window.setTimeout(() => {
+        timerId = null;
+        setReady(true);
+      }, DEV_EXPLORER_DEFER_MS);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, []);
+
+  if (!ready) {
+    return null;
+  }
+
+  return (
+    <React.Suspense fallback={null}>
+      <LazyContainerlabExplorerView />
+    </React.Suspense>
+  );
+}
 
 export const AppContent: React.FC<AppContentProps> = ({
   reactFlowRef,
@@ -727,15 +794,6 @@ export const AppContent: React.FC<AppContentProps> = ({
   useDevMockTrafficStats(shouldCollectDevMockTrafficStats(host, isDevMock, interactionMode));
   const { layoutRef, devExplorerWidth, isDevExplorerDragging, handleDevExplorerResizeStart } =
     useDevExplorerPane(showDevExplorer);
-
-  React.useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      void preloadMonacoCodeEditor();
-    }, 0);
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, []);
 
   React.useEffect(() => {
     if (!shouldDumpCssVars()) return;
@@ -1590,7 +1648,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 overflow: "hidden"
               }}
             >
-              <ContainerlabExplorerView />
+              <DeferredDevExplorerView />
               <Box
                 onMouseDown={handleDevExplorerResizeStart}
                 sx={{
@@ -1756,37 +1814,49 @@ export const AppContent: React.FC<AppContentProps> = ({
         </Box>
 
         {/* Modals */}
-        <LifecycleProgressModal
-          isOpen={state.lifecycleModalOpen}
-          isProcessing={isProcessing}
-          mode={state.processingMode}
-          status={state.lifecycleStatus}
-          statusMessage={state.lifecycleStatusMessage}
-          labName={state.labName}
-          logs={state.lifecycleLogs}
-          onClose={handleCloseLifecycleModal}
-          onCancel={handleCancelLifecycle}
-        />
-        <LabSettingsModal
-          isOpen={panelVisibility.showLabSettingsModal}
-          onClose={panelVisibility.handleCloseLabSettings}
-          mode={state.mode}
-          isLocked={isInteractionLocked}
-          labSettings={state.labSettings ?? { name: state.labName }}
-          gridLineWidth={layoutControls.gridLineWidth}
-          onGridLineWidthChange={layoutControls.setGridLineWidth}
-          gridStyle={layoutControls.gridStyle}
-          onGridStyleChange={layoutControls.setGridStyle}
-          gridColor={layoutControls.gridColor}
-          onGridColorChange={layoutControls.setGridColor}
-          gridBgColor={layoutControls.gridBgColor}
-          onGridBgColorChange={layoutControls.setGridBgColor}
-          onResetGridColors={layoutControls.resetGridColors}
-        />
-        <ShortcutsModal
-          isOpen={panelVisibility.showShortcutsModal}
-          onClose={panelVisibility.handleCloseShortcuts}
-        />
+        {state.lifecycleModalOpen || isProcessing ? (
+          <React.Suspense fallback={null}>
+            <LazyLifecycleProgressModal
+              isOpen={state.lifecycleModalOpen}
+              isProcessing={isProcessing}
+              mode={state.processingMode}
+              status={state.lifecycleStatus}
+              statusMessage={state.lifecycleStatusMessage}
+              labName={state.labName}
+              logs={state.lifecycleLogs}
+              onClose={handleCloseLifecycleModal}
+              onCancel={handleCancelLifecycle}
+            />
+          </React.Suspense>
+        ) : null}
+        {panelVisibility.showLabSettingsModal ? (
+          <React.Suspense fallback={null}>
+            <LazyLabSettingsModal
+              isOpen={panelVisibility.showLabSettingsModal}
+              onClose={panelVisibility.handleCloseLabSettings}
+              mode={state.mode}
+              isLocked={isInteractionLocked}
+              labSettings={state.labSettings ?? { name: state.labName }}
+              gridLineWidth={layoutControls.gridLineWidth}
+              onGridLineWidthChange={layoutControls.setGridLineWidth}
+              gridStyle={layoutControls.gridStyle}
+              onGridStyleChange={layoutControls.setGridStyle}
+              gridColor={layoutControls.gridColor}
+              onGridColorChange={layoutControls.setGridColor}
+              gridBgColor={layoutControls.gridBgColor}
+              onGridBgColorChange={layoutControls.setGridBgColor}
+              onResetGridColors={layoutControls.resetGridColors}
+            />
+          </React.Suspense>
+        ) : null}
+        {panelVisibility.showShortcutsModal ? (
+          <React.Suspense fallback={null}>
+            <LazyShortcutsModal
+              isOpen={panelVisibility.showShortcutsModal}
+              onClose={panelVisibility.handleCloseShortcuts}
+            />
+          </React.Suspense>
+        ) : null}
         {panelVisibility.showSvgExportModal && (
           <SvgExportModalContainer
             onClose={panelVisibility.handleCloseSvgExport}
@@ -1795,23 +1865,35 @@ export const AppContent: React.FC<AppContentProps> = ({
             customIcons={getCustomIconMap(state.customIcons)}
           />
         )}
-        <BulkLinkModal
-          isOpen={isBulkLinkModalOpen}
-          mode={interactionMode}
-          isLocked={isInteractionLocked}
-          onClose={panelVisibility.handleCloseBulkLink}
-        />
-        <AboutModal
-          isOpen={panelVisibility.showAboutPanel}
-          onClose={panelVisibility.handleCloseAbout}
-        />
+        {isBulkLinkModalOpen ? (
+          <React.Suspense fallback={null}>
+            <LazyBulkLinkModal
+              isOpen={isBulkLinkModalOpen}
+              mode={interactionMode}
+              isLocked={isInteractionLocked}
+              onClose={panelVisibility.handleCloseBulkLink}
+            />
+          </React.Suspense>
+        ) : null}
+        {panelVisibility.showAboutPanel ? (
+          <React.Suspense fallback={null}>
+            <LazyAboutModal
+              isOpen={panelVisibility.showAboutPanel}
+              onClose={panelVisibility.handleCloseAbout}
+            />
+          </React.Suspense>
+        ) : null}
 
         {/* Popovers */}
-        <FindNodePopover
-          anchorPosition={panelVisibility.findPopoverPosition}
-          onClose={panelVisibility.handleCloseFindPopover}
-          rfInstance={rfInstance}
-        />
+        {panelVisibility.findPopoverPosition ? (
+          <React.Suspense fallback={null}>
+            <LazyFindNodePopover
+              anchorPosition={panelVisibility.findPopoverPosition}
+              onClose={panelVisibility.handleCloseFindPopover}
+              rfInstance={rfInstance}
+            />
+          </React.Suspense>
+        ) : null}
       </Box>
     </MuiThemeProvider>
   );

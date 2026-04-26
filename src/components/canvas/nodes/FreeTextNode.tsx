@@ -2,14 +2,14 @@
  * FreeTextNode - Custom React Flow node for free text annotations
  * Supports markdown rendering via markdown-it
  */
-import React, { memo, useMemo, useCallback, useState } from "react";
+import React, { memo, useMemo, useCallback, useEffect, useState } from "react";
 import { type NodeProps, NodeResizer, type ResizeParams } from "@xyflow/react";
 
 import type { FreeTextNodeData } from "../types";
 import { SELECTION_COLOR } from "../types";
 import { useIsLocked } from "../../../stores/topoViewerStore";
 import { useAnnotationHandlers } from "../../../stores/canvasStore";
-import { renderMarkdown } from "../../../utils/markdownRenderer";
+import type { renderMarkdown as renderMarkdownType } from "../../../utils/markdownRenderer";
 
 import { RotationHandle } from "./AnnotationHandles";
 import "./FreeTextNode.css";
@@ -17,6 +17,19 @@ import "./FreeTextNode.css";
 /** Minimum dimensions for resize */
 const MIN_WIDTH = 40;
 const MIN_HEIGHT = 20;
+
+type RenderMarkdown = typeof renderMarkdownType;
+
+let renderMarkdownFn: RenderMarkdown | null = null;
+let markdownRendererPromise: Promise<RenderMarkdown> | null = null;
+
+function loadMarkdownRenderer(): Promise<RenderMarkdown> {
+  markdownRendererPromise ??= import("../../../utils/markdownRenderer").then((module) => {
+    renderMarkdownFn = module.renderMarkdown;
+    return module.renderMarkdown;
+  });
+  return markdownRendererPromise;
+}
 
 /** Build wrapper style for the node */
 function buildWrapperStyle(rotation: number, selected: boolean): React.CSSProperties {
@@ -203,6 +216,28 @@ const FreeTextNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
   // Track resize/rotate state to keep selection border and handles visible
   const [isResizing, setIsResizing] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
+  const [renderedHtml, setRenderedHtml] = useState<string | null>(() =>
+    renderMarkdownFn?.(nodeData.text) ?? null
+  );
+
+  useEffect(() => {
+    if (renderMarkdownFn) {
+      setRenderedHtml(renderMarkdownFn(nodeData.text));
+      return;
+    }
+
+    let cancelled = false;
+    setRenderedHtml(null);
+    void loadMarkdownRenderer().then((renderMarkdown) => {
+      if (!cancelled) {
+        setRenderedHtml(renderMarkdown(nodeData.text));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nodeData.text]);
 
   // Resize handlers
   const handleResizeStart = useCallback(() => {
@@ -237,8 +272,10 @@ const FreeTextNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
     annotationHandlers?.onFreeTextRotationEnd?.(id);
   }, [id, annotationHandlers]);
 
-  const renderedHtml = useMemo(() => renderMarkdown(nodeData.text), [nodeData.text]);
-  const renderedContent = useMemo(() => renderHtmlToReactNodes(renderedHtml), [renderedHtml]);
+  const renderedContent = useMemo(
+    () => (renderedHtml === null ? nodeData.text : renderHtmlToReactNodes(renderedHtml)),
+    [nodeData.text, renderedHtml]
+  );
   const isMediaOnly = useMemo(() => isStandaloneMarkdownImage(nodeData.text), [nodeData.text]);
   const hasFixedContentSize =
     typeof nodeData.height === "number" && Number.isFinite(nodeData.height);

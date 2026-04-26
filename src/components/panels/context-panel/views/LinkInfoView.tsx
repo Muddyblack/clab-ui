@@ -5,10 +5,14 @@ import Box from "@mui/material/Box";
 import type { LinkData } from "../../../../hooks/ui";
 import type { InterfaceStatsPayload } from "../../../../core/types/topology";
 import { getString } from "../../../../core/utilities/typeHelpers";
-import { TrafficChart } from "../../TrafficChart";
 import type { TabDefinition } from "../../../ui/editor";
 import { TabNavigation } from "../../../ui/editor/TabNavigation";
 import { PanelSectionHeader, ReadOnlyCopyField } from "../../../ui/form";
+
+const LazyTrafficChart = React.lazy(async () => {
+  const module = await import("../../TrafficChart");
+  return { default: module.TrafficChart };
+});
 
 interface EndpointData {
   node?: string;
@@ -138,7 +142,9 @@ export const LinkInfoView: React.FC<LinkInfoViewProps> = ({ linkData }) => {
 
         <PanelSectionHeader title="Traffic" withTopDivider={true} />
         <Box sx={{ minHeight: 200 }}>
-          <TrafficChart stats={currentEndpoint.stats} endpointKey={endpointKey} />
+          <React.Suspense fallback={null}>
+            <LazyTrafficChart stats={currentEndpoint.stats} endpointKey={endpointKey} />
+          </React.Suspense>
         </Box>
       </Box>
     </Box>

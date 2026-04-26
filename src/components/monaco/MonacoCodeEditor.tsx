@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import * as monaco from "monaco-editor";
+import "monaco-editor/min/vs/editor/editor.main.css";
 // @ts-ignore Monaco's bundled YAML grammar module is untyped.
 import * as yamlMonaco from "monaco-editor/esm/vs/basic-languages/yaml/yaml.js";
 import * as YAML from "yaml";
