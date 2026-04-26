@@ -3,8 +3,8 @@
  */
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Map as MapLibreMap, LngLatBounds, StyleSpecification } from "maplibre-gl";
-import maplibregl from "maplibre-gl";
+import type * as MapLibreModule from "maplibre-gl";
+import type { Map as MapLibreMap, LngLatBoundsLike, StyleSpecification } from "maplibre-gl";
 import type { Node, ReactFlowInstance, XYPosition } from "@xyflow/react";
 
 import { useTopologySessionClient } from "../../host";
@@ -95,6 +95,14 @@ const MAX_GEO_SLOT_SCAN = 4096;
 
 let maplibreWorkerBlobUrl: string | null = null;
 let maplibreWorkerBlobSourceKey: string | null = null;
+type MapLibreModuleType = typeof MapLibreModule;
+
+let maplibreModulePromise: Promise<MapLibreModuleType> | null = null;
+
+function loadMapLibreModule(): Promise<MapLibreModuleType> {
+  maplibreModulePromise ??= import("maplibre-gl") as Promise<MapLibreModuleType>;
+  return maplibreModulePromise;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -276,8 +284,13 @@ function computeLineBounds(
   };
 }
 
-function buildGeoBounds(nodes: Node[]): LngLatBounds | null {
-  let bounds: LngLatBounds | null = null;
+function buildGeoBounds(nodes: Node[]): LngLatBoundsLike | null {
+  let minLat = Number.POSITIVE_INFINITY;
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  let hasBounds = false;
+
   for (const node of nodes) {
     const start = extractGeoCoordinates(node);
     const end = extractEndGeoCoordinates(node);
@@ -286,14 +299,15 @@ function buildGeoBounds(nodes: Node[]): LngLatBounds | null {
     if (start) coords.push(start);
     if (end) coords.push(end);
     for (const geo of coords) {
-      if (!bounds) {
-        bounds = new maplibregl.LngLatBounds([geo.lng, geo.lat], [geo.lng, geo.lat]);
-      } else {
-        bounds.extend([geo.lng, geo.lat]);
-      }
+      minLat = Math.min(minLat, geo.lat);
+      minLng = Math.min(minLng, geo.lng);
+      maxLat = Math.max(maxLat, geo.lat);
+      maxLng = Math.max(maxLng, geo.lng);
+      hasBounds = true;
     }
   }
-  return bounds;
+
+  return hasBounds ? [[minLng, minLat], [maxLng, maxLat]] : null;
 }
 
 function geoKey(coords: GeoCoordinates): string {
@@ -599,39 +613,50 @@ export function useGeoMapLayout({
 
   useEffect(() => {
     if (!isGeoLayout || mapRef.current || !containerRef.current) return;
-    try {
-      if (!workerConfiguredRef.current) {
-        const workerUrl = resolveMapLibreWorkerUrl();
-        if (workerUrl != null && workerUrl.length > 0) {
-          maplibregl.setWorkerUrl(workerUrl);
+    let cancelled = false;
+
+    void loadMapLibreModule().then((maplibreModule) => {
+      if (cancelled || !isGeoLayout || mapRef.current || !containerRef.current) return;
+      const maplibregl = maplibreModule;
+
+      try {
+        if (!workerConfiguredRef.current) {
+          const workerUrl = resolveMapLibreWorkerUrl();
+          if (workerUrl != null && workerUrl.length > 0) {
+            maplibregl.setWorkerUrl(workerUrl);
+          }
+          workerConfiguredRef.current = true;
         }
-        workerConfiguredRef.current = true;
+        const map = new maplibregl.Map({
+          container: containerRef.current,
+          style: MAP_STYLE,
+          center: DEFAULT_CENTER,
+          zoom: DEFAULT_ZOOM,
+          attributionControl: {}
+        });
+
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+        map.on("load", () => {
+          setIsReady(true);
+        });
+
+        map.on("error", (event: { error?: Error }) => {
+          const message = event.error?.message ?? "Unknown map error";
+          log.error(`[GeoMap] MapLibre error: ${message}`);
+        });
+
+        mapRef.current = map;
+      } catch (err) {
+        log.error(
+          `[GeoMap] Failed to initialize map: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
-      const map = new maplibregl.Map({
-        container: containerRef.current,
-        style: MAP_STYLE,
-        center: DEFAULT_CENTER,
-        zoom: DEFAULT_ZOOM,
-        attributionControl: {}
-      });
+    });
 
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-
-      map.on("load", () => {
-        setIsReady(true);
-      });
-
-      map.on("error", (event: { error?: Error }) => {
-        const message = event.error?.message ?? "Unknown map error";
-        log.error(`[GeoMap] MapLibre error: ${message}`);
-      });
-
-      mapRef.current = map;
-    } catch (err) {
-      log.error(
-        `[GeoMap] Failed to initialize map: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [isGeoLayout]);
 
   useEffect(() => {
@@ -890,10 +915,10 @@ export function useGeoMapLayout({
         resetViewport: true
       });
     };
-  }, [isGeoLayout, reactFlowInstanceRef, canvasContainerRef]);
+  }, [isGeoLayout, isReady, reactFlowInstanceRef, canvasContainerRef]);
 
   useEffect(() => {
-    if (!isGeoLayout) return;
+    if (!isGeoLayout || !isReady) return;
     const container = containerRef.current;
     const map = mapRef.current;
     if (!container || !map || typeof ResizeObserver === "undefined") return;
@@ -902,7 +927,7 @@ export function useGeoMapLayout({
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [isGeoLayout]);
+  }, [isGeoLayout, isReady]);
 
   const getGeoCoordinatesForNode = useCallback((node: Node): GeoCoordinates | null => {
     const map = mapRef.current;

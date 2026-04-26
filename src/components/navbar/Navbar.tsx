@@ -12,30 +12,28 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import {
-  AccountTree as AccountTreeIcon,
-  ExpandMore as ExpandMoreIcon,
-  PhotoCameraBack as PhotoCameraBackIcon,
-  Check as CheckIcon,
-  CleaningServices as CleaningServicesIcon,
-  FitScreen as FitScreenIcon,
-  Info as InfoIcon,
-  Keyboard as KeyboardIcon,
-  Label as LabelIcon,
-  Link as LinkIcon,
-  Lock as LockIcon,
-  LockOpen as LockOpenIcon,
-  PlayArrow as PlayArrowIcon,
-  Redo as RedoIcon,
-  Replay as ReplayIcon,
-  Search as SearchIcon,
-  Settings as SettingsIcon,
-  Stop as StopIcon,
-  Undo as UndoIcon,
-  ViewColumn as ViewColumnIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon
-} from "@mui/icons-material";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import CheckIcon from "@mui/icons-material/Check";
+import CleaningServicesIcon from "@mui/icons-material/CleaningServices";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import FitScreenIcon from "@mui/icons-material/FitScreen";
+import InfoIcon from "@mui/icons-material/Info";
+import KeyboardIcon from "@mui/icons-material/Keyboard";
+import LabelIcon from "@mui/icons-material/Label";
+import LinkIcon from "@mui/icons-material/Link";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
+import PhotoCameraBackIcon from "@mui/icons-material/PhotoCameraBack";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import RedoIcon from "@mui/icons-material/Redo";
+import ReplayIcon from "@mui/icons-material/Replay";
+import SearchIcon from "@mui/icons-material/Search";
+import SettingsIcon from "@mui/icons-material/Settings";
+import StopIcon from "@mui/icons-material/Stop";
+import UndoIcon from "@mui/icons-material/Undo";
+import ViewColumnIcon from "@mui/icons-material/ViewColumn";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 
 import type { LinkLabelMode } from "../../stores/topoViewerStore";
 import {
@@ -67,6 +65,7 @@ function getToolbarAnchorPosition(
 }
 
 export interface NavbarProps {
+  hasActiveTopology?: boolean;
   onZoomToFit?: () => void;
   layout: LayoutOption;
   onLayoutChange: (layout: LayoutOption) => void;
@@ -98,6 +97,7 @@ export interface NavbarProps {
 // This is a UI composition component with lots of conditional rendering and menu wiring.
 /* eslint-disable complexity */
 export const Navbar: React.FC<NavbarProps> = ({
+  hasActiveTopology = true,
   onZoomToFit,
   layout,
   onLayoutChange,
@@ -120,6 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   linkLabelMode,
   onLinkLabelModeChange
 }) => {
+  const isTopologyActive = hasActiveTopology;
   const mode = useMode();
   const labName = useLabName();
   const isLocked = useIsLocked();
@@ -138,11 +139,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const linkLabelMenuOpen = Boolean(linkLabelMenuPosition);
 
   const handleLinkLabelClick = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!isTopologyActive) return;
     const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
     if (anchorPosition) {
       setLinkLabelMenuPosition(anchorPosition);
     }
-  }, []);
+  }, [isTopologyActive]);
 
   const handleLinkLabelClose = React.useCallback(() => {
     setLinkLabelMenuPosition(null);
@@ -164,11 +166,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const deployMenuOpen = Boolean(deployMenuPosition);
 
   const handleDeployMenuOpen = React.useCallback((event: React.MouseEvent<HTMLElement>) => {
+    if (!isTopologyActive) return;
     const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
     if (anchorPosition) {
       setDeployMenuPosition(anchorPosition);
     }
-  }, []);
+  }, [isTopologyActive]);
 
   const handleDeployMenuClose = React.useCallback(() => {
     setDeployMenuPosition(null);
@@ -210,12 +213,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   // Primary action depends on mode
   const handlePrimaryAction = React.useCallback(() => {
+    if (!isTopologyActive) return;
     if (isViewerMode) {
       handleDestroy();
     } else {
       handleDeploy();
     }
-  }, [isViewerMode, handleDestroy, handleDeploy]);
+  }, [isTopologyActive, isViewerMode, handleDestroy, handleDeploy]);
 
   const [layoutMenuPosition, setLayoutMenuPosition] = React.useState<{
     top: number;
@@ -224,11 +228,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const layoutMenuOpen = Boolean(layoutMenuPosition);
 
   const handleLayoutClick = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!isTopologyActive) return;
     const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
     if (anchorPosition) {
       setLayoutMenuPosition(anchorPosition);
     }
-  }, []);
+  }, [isTopologyActive]);
 
   const handleLayoutClose = React.useCallback(() => {
     setLayoutMenuPosition(null);
@@ -244,13 +249,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleFindNodeClick = React.useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (!isTopologyActive) return;
       const anchorPosition = getToolbarAnchorPosition(appBarRef.current, event.currentTarget);
       if (anchorPosition) {
         onFindNode?.(anchorPosition);
       }
     },
-    [onFindNode]
+    [isTopologyActive, onFindNode]
   );
+
+  React.useEffect(() => {
+    if (isTopologyActive) return;
+    setDeployMenuPosition(null);
+    setLayoutMenuPosition(null);
+    setLinkLabelMenuPosition(null);
+  }, [isTopologyActive]);
 
   return (
     <AppBar
@@ -280,20 +293,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Deploy / Destroy */}
         <Tooltip title={isViewerMode ? "Destroy Lab" : "Deploy Lab"}>
-          <IconButton
-            size="small"
-            onClick={handlePrimaryAction}
-            disabled={isProcessing}
-            sx={{ color: isViewerMode ? ERROR_MAIN : SUCCESS_MAIN }}
-            data-testid="navbar-deploy"
-          >
-            {isViewerMode ? <StopIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={handlePrimaryAction}
+              disabled={isProcessing || !isTopologyActive}
+              sx={{ color: isViewerMode ? ERROR_MAIN : SUCCESS_MAIN }}
+              data-testid="navbar-deploy"
+            >
+              {isViewerMode ? <StopIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+            </IconButton>
+          </span>
         </Tooltip>
         <IconButton
           size="small"
           onClick={handleDeployMenuOpen}
-          disabled={isProcessing}
+          disabled={isProcessing || !isTopologyActive}
           aria-controls={deployMenuOpen ? "deploy-split-menu" : undefined}
           aria-haspopup="true"
           aria-expanded={deployMenuOpen ? "true" : undefined}
@@ -385,22 +400,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Lock / Unlock */}
         <Tooltip title={isLocked ? "Unlock lab to edit" : "Lock Lab"}>
-          <IconButton
-            size="small"
-            onClick={toggleLock}
-            disabled={isProcessing}
-            sx={{ color: isLocked ? ERROR_MAIN : "inherit" }}
-            data-testid="navbar-lock"
-          >
-            {isLocked ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={toggleLock}
+              disabled={isProcessing || !isTopologyActive}
+              sx={{ color: isLocked ? ERROR_MAIN : "inherit" }}
+              data-testid="navbar-lock"
+            >
+              {isLocked ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Lab Settings */}
         <Tooltip title="Lab Settings">
-          <IconButton size="small" onClick={onLabSettings} data-testid="navbar-lab-settings">
-            <SettingsIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onLabSettings}
+              disabled={!isTopologyActive}
+              data-testid="navbar-lab-settings"
+            >
+              <SettingsIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Undo - only show in edit mode */}
@@ -410,7 +434,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <IconButton
                 size="small"
                 onClick={onUndo}
-                disabled={!canUndo}
+                disabled={!isTopologyActive || !canUndo}
                 data-testid="navbar-undo"
               >
                 <UndoIcon fontSize="small" />
@@ -426,7 +450,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <IconButton
                 size="small"
                 onClick={onRedo}
-                disabled={!canRedo}
+                disabled={!isTopologyActive || !canRedo}
                 data-testid="navbar-redo"
               >
                 <RedoIcon fontSize="small" />
@@ -444,7 +468,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <IconButton
                 size="small"
                 onClick={onShowBulkLink}
-                disabled={isLocked}
+                disabled={!isTopologyActive || isLocked}
                 data-testid="navbar-bulk-link"
               >
                 <LinkIcon fontSize="small" />
@@ -455,23 +479,44 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Fit to Viewport */}
         <Tooltip title="Fit to Viewport">
-          <IconButton size="small" onClick={onZoomToFit} data-testid="navbar-fit-viewport">
-            <FitScreenIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onZoomToFit}
+              disabled={!isTopologyActive}
+              data-testid="navbar-fit-viewport"
+            >
+              <FitScreenIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Toggle YAML Split View */}
         <Tooltip title="Toggle YAML Split View">
-          <IconButton size="small" onClick={onToggleSplit} data-testid="navbar-split-view">
-            <ViewColumnIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onToggleSplit}
+              disabled={!isTopologyActive}
+              data-testid="navbar-split-view"
+            >
+              <ViewColumnIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Layout Manager */}
         <Tooltip title="Layout">
-          <IconButton size="small" onClick={handleLayoutClick} data-testid="navbar-layout">
-            <AccountTreeIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={handleLayoutClick}
+              disabled={!isTopologyActive}
+              data-testid="navbar-layout"
+            >
+              <AccountTreeIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
         <Menu
           open={layoutMenuOpen}
@@ -496,16 +541,30 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Find Node */}
         <Tooltip title="Find Node">
-          <IconButton size="small" onClick={handleFindNodeClick} data-testid="navbar-find-node">
-            <SearchIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={handleFindNodeClick}
+              disabled={!isTopologyActive}
+              data-testid="navbar-find-node"
+            >
+              <SearchIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
 
         {/* Link Labels Dropdown */}
         <Tooltip title="Link Labels">
-          <IconButton size="small" onClick={handleLinkLabelClick} data-testid="navbar-link-labels">
-            <LabelIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={handleLinkLabelClick}
+              disabled={!isTopologyActive}
+              data-testid="navbar-link-labels"
+            >
+              <LabelIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
         <Menu
           open={linkLabelMenuOpen}
@@ -545,9 +604,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Capture Viewport */}
         <Tooltip title="Capture Viewport as SVG">
-          <IconButton size="small" onClick={onCaptureViewport} data-testid="navbar-capture">
-            <PhotoCameraBackIcon fontSize="small" />
-          </IconButton>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onCaptureViewport}
+              disabled={!isTopologyActive}
+              data-testid="navbar-capture"
+            >
+              <PhotoCameraBackIcon fontSize="small" />
+            </IconButton>
+          </span>
         </Tooltip>
 
         <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />

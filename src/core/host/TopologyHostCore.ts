@@ -134,9 +134,6 @@ export class TopologyHostCore implements TopologyHost {
     const modeChanged = context.mode !== undefined && context.mode !== this.mode;
     const deploymentChanged =
       context.deploymentState !== undefined && context.deploymentState !== this.deploymentState;
-    const containerChanged =
-      context.containerDataProvider !== undefined &&
-      context.containerDataProvider !== this.containerDataProvider;
 
     if (context.mode) this.mode = context.mode;
     if (context.deploymentState) this.deploymentState = context.deploymentState;
@@ -144,7 +141,9 @@ export class TopologyHostCore implements TopologyHost {
       this.containerDataProvider = context.containerDataProvider;
     }
 
-    if (modeChanged || deploymentChanged || containerChanged) {
+    // Runtime container updates can be very frequent (e.g. 1s interface stats).
+    // Avoid forcing full YAML/annotations reloads on each runtime tick.
+    if (modeChanged || deploymentChanged) {
       this.snapshot = null;
     }
   }
@@ -428,7 +427,7 @@ export class TopologyHostCore implements TopologyHost {
         await this.annotationsIO.modifyAnnotations(this.yamlFilePath, (current) => ({
           ...current,
           viewerSettings: {
-            ...(current.viewerSettings ?? {}),
+            ...current.viewerSettings,
             ...command.payload
           }
         }));
@@ -1287,7 +1286,7 @@ function mergeAnnotationsPayload(
   const merged: TopologyAnnotations = { ...current, ...annotations };
   if (annotations.viewerSettings) {
     merged.viewerSettings = {
-      ...(current.viewerSettings ?? {}),
+      ...current.viewerSettings,
       ...annotations.viewerSettings
     };
   }

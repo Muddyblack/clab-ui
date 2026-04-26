@@ -9,6 +9,14 @@ import type {
   ExplorerIncomingMessage,
   ExplorerUiState
 } from "../explorer/shared/explorer/types";
+import type {
+  ContainerImageSummary,
+  ImageActionResult,
+  ImageManagerTargetOptions,
+  ImagePullRequest,
+  ImageRemoveRequest,
+  KindImageReference
+} from "../image-manager/types";
 
 export type TopoViewerLifecycleAction =
   | "deployLab"
@@ -86,15 +94,25 @@ export interface HostRuntimeInterfaceStats {
   statsIntervalSeconds?: number;
 }
 
+export interface HostRuntimeNetemState {
+  delay?: string;
+  jitter?: string;
+  loss?: string;
+  rate?: string;
+  corruption?: string;
+}
+
 export interface HostRuntimeInterface {
   name: string;
   alias: string;
+  label?: string;
   mac: string;
   mtu: number;
   state: string;
   type: string;
   ifIndex?: number;
   stats?: HostRuntimeInterfaceStats;
+  netemState?: HostRuntimeNetemState;
 }
 
 export interface HostRuntimeContainer {
@@ -151,6 +169,13 @@ export interface ClabUiTopoViewerHost {
   subscribe(handler: (event: ClabUiTopoViewerEvent) => void): () => void;
 }
 
+export interface ClabUiImageHost {
+  listImages(options?: ImageManagerTargetOptions): Promise<ContainerImageSummary[]>;
+  listImageReferences(options?: ImageManagerTargetOptions): Promise<KindImageReference[]>;
+  pullImage(request: ImagePullRequest): Promise<ImageActionResult>;
+  removeImage(request: ImageRemoveRequest): Promise<ImageActionResult>;
+}
+
 export interface ClabUiHost {
   postMessage(message: unknown): void;
   subscribe(handler: (event: MessageEvent<unknown>) => void): () => void;
@@ -159,6 +184,7 @@ export interface ClabUiHost {
     disableDevMockTraffic?: boolean;
   };
   explorer: ClabUiExplorerHost;
+  images?: ClabUiImageHost;
   topoViewer: ClabUiTopoViewerHost;
   topology: {
     requestSnapshot(

@@ -4,7 +4,6 @@ import React from "react";
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
 import Box from "@mui/material/Box";
 
-import { ContainerlabExplorerView } from "./explorer/containerlabExplorerView.webview";
 import type { NetemState } from "./core/parsing";
 import type { TopoEdge, TopoNode, TopologyHostCommand } from "./core/types";
 
@@ -26,14 +25,9 @@ import {
 import type { ReactFlowCanvasRef } from "./components/canvas";
 import { ReactFlowCanvas } from "./components/canvas";
 import { Navbar } from "./components/navbar/Navbar";
-import { AboutModal, type LinkImpairmentData } from "./components/panels";
+import type { LinkImpairmentData } from "./components/panels";
 import { ContextPanel } from "./components/panels/context-panel";
-import { LabSettingsModal } from "./components/panels/lab-settings/LabSettingsModal";
-import { LifecycleProgressModal } from "./components/panels/LifecycleProgressModal";
-import { ShortcutsModal } from "./components/panels/ShortcutsModal";
-import { SvgExportModal } from "./components/panels/SvgExportModal";
-import { BulkLinkModal } from "./components/panels/BulkLinkModal";
-import { FindNodePopover } from "./components/panels/FindNodePopover";
+import type { SvgExportModalProps } from "./components/panels/SvgExportModal";
 import { ShortcutDisplay, ToastContainer } from "./components/ui";
 import { EasterEggRenderer, useEasterEgg } from "./easter-eggs";
 import {
@@ -62,6 +56,7 @@ import {
 import {
   useAnnotationUIActions,
   useAnnotationUIState,
+  useCanvasStore,
   useGraphActions,
   useGraphState,
   useGraphStore,
@@ -87,6 +82,47 @@ import {
 type LayoutControls = ReturnType<typeof useLayoutControls>;
 const DEV_EXPLORER_MIN_WIDTH = 280;
 const DEV_EXPLORER_DEFAULT_WIDTH = 360;
+const DEV_EXPLORER_DEFER_MS = 300;
+
+const LazyContainerlabExplorerView = React.lazy(async () => {
+  const module = await import("./explorer/containerlabExplorerView.webview");
+  return { default: module.ContainerlabExplorerView };
+});
+
+const LazyLifecycleProgressModal = React.lazy(async () => {
+  const module = await import("./components/panels/LifecycleProgressModal");
+  return { default: module.LifecycleProgressModal };
+});
+
+const LazyLabSettingsModal = React.lazy(async () => {
+  const module = await import("./components/panels/lab-settings/LabSettingsModal");
+  return { default: module.LabSettingsModal };
+});
+
+const LazyShortcutsModal = React.lazy(async () => {
+  const module = await import("./components/panels/ShortcutsModal");
+  return { default: module.ShortcutsModal };
+});
+
+const LazySvgExportModal = React.lazy(async () => {
+  const module = await import("./components/panels/SvgExportModal");
+  return { default: module.SvgExportModal };
+});
+
+const LazyBulkLinkModal = React.lazy(async () => {
+  const module = await import("./components/panels/BulkLinkModal");
+  return { default: module.BulkLinkModal };
+});
+
+const LazyAboutModal = React.lazy(async () => {
+  const module = await import("./components/panels/AboutModal");
+  return { default: module.AboutModal };
+});
+
+const LazyFindNodePopover = React.lazy(async () => {
+  const module = await import("./components/panels/FindNodePopover");
+  return { default: module.FindNodePopover };
+});
 
 const TOPO_NODE_TYPES = new Set<string>([
   "topology-node",
@@ -316,8 +352,46 @@ function shouldCollectDevMockTrafficStats(
   return true;
 }
 
-function shouldShowBulkLinkModal(isRequested: boolean, isProcessing: boolean): boolean {
-  return isRequested && !isProcessing;
+function shouldShowBulkLinkModal(
+  hasActiveTopology: boolean,
+  isRequested: boolean,
+  isProcessing: boolean
+): boolean {
+  return hasActiveTopology && isRequested && !isProcessing;
+}
+
+function hasActiveTopologySession(
+  sessionClient: ReturnType<typeof useTopologySessionClient>,
+  labName: string
+): boolean {
+  const context = sessionClient.getContext();
+  if (context.topologyRef !== undefined) {
+    return true;
+  }
+  if (typeof context.path === "string" && context.path.trim().length > 0) {
+    return true;
+  }
+  return labName.trim().length > 0;
+}
+
+function resolveTopologyViewportKey(
+  sessionClient: ReturnType<typeof useTopologySessionClient>,
+  labName: string
+): string | null {
+  const context = sessionClient.getContext();
+  const topologyId = context.topologyRef?.topologyId?.trim();
+  if (topologyId && topologyId.length > 0) {
+    return topologyId;
+  }
+  const path = context.path?.trim();
+  if (path && path.length > 0) {
+    return `path:${path}`;
+  }
+  const normalizedLabName = labName.trim();
+  if (normalizedLabName.length > 0) {
+    return `lab:${normalizedLabName}`;
+  }
+  return null;
 }
 
 interface DevExplorerPaneState {
@@ -637,7 +711,7 @@ const AnnotationRuntimeBridge: React.FC<AnnotationRuntimeBridgeProps> = ({
 };
 
 type SvgExportModalContainerProps = Pick<
-  React.ComponentPropsWithoutRef<typeof SvgExportModal>,
+  SvgExportModalProps,
   "onClose" | "rfInstance" | "customIcons" | "labName"
 >;
 
@@ -646,20 +720,53 @@ const SvgExportModalContainer: React.FC<SvgExportModalContainerProps> = React.me
     const { textAnnotations, shapeAnnotations, groups } = useDerivedAnnotations();
 
     return (
-      <SvgExportModal
-        isOpen
-        onClose={onClose}
-        labName={labName}
-        textAnnotations={textAnnotations}
-        shapeAnnotations={shapeAnnotations}
-        groups={groups}
-        rfInstance={rfInstance}
-        customIcons={customIcons}
-      />
+      <React.Suspense fallback={null}>
+        <LazySvgExportModal
+          isOpen
+          onClose={onClose}
+          labName={labName}
+          textAnnotations={textAnnotations}
+          shapeAnnotations={shapeAnnotations}
+          groups={groups}
+          rfInstance={rfInstance}
+          customIcons={customIcons}
+        />
+      </React.Suspense>
     );
   }
 );
 SvgExportModalContainer.displayName = "SvgExportModalContainer";
+
+function DeferredDevExplorerView() {
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    let timerId: number | null = null;
+    const frameId = window.requestAnimationFrame(() => {
+      timerId = window.setTimeout(() => {
+        timerId = null;
+        setReady(true);
+      }, DEV_EXPLORER_DEFER_MS);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, []);
+
+  if (!ready) {
+    return null;
+  }
+
+  return (
+    <React.Suspense fallback={null}>
+      <LazyContainerlabExplorerView />
+    </React.Suspense>
+  );
+}
 
 export const AppContent: React.FC<AppContentProps> = ({
   reactFlowRef,
@@ -675,6 +782,8 @@ export const AppContent: React.FC<AppContentProps> = ({
   const graphActions = useGraphActions();
   const annotationUiActions = useAnnotationUIActions();
   const isProcessing = state.isProcessing;
+  const hasActiveTopology = hasActiveTopologySession(sessionClient, state.labName);
+  const topologyViewportKey = resolveTopologyViewportKey(sessionClient, state.labName);
   const isInteractionLocked = getInteractionLockState(state.isLocked, isProcessing);
   const interactionMode = getInteractionMode(state.mode, isProcessing);
   const isDevMock = React.useMemo(() => isDevMockWebview(host), [host]);
@@ -1294,10 +1403,15 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Auto-open context panel when selection/editing state changes
   React.useEffect(() => {
-    if (hasContextContent && !isProcessing && !panelVisibility.isContextPanelOpen) {
+    if (
+      hasActiveTopology &&
+      hasContextContent &&
+      !isProcessing &&
+      !panelVisibility.isContextPanelOpen
+    ) {
       panelVisibility.handleOpenContextPanel("auto");
     }
-  }, [hasContextContent, isProcessing, panelVisibility]);
+  }, [hasActiveTopology, hasContextContent, isProcessing, panelVisibility]);
 
   // close if palette wasn't open, else go back to palette
   const handleContextPanelBack = React.useCallback(() => {
@@ -1319,13 +1433,17 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [reactFlowRef, rfInstance]);
 
   const handleOpenNodePalette = React.useCallback(() => {
+    if (!hasActiveTopology) {
+      return;
+    }
     handleContextPanelBack();
     panelVisibility.handleOpenContextPanel();
-  }, [handleContextPanelBack, panelVisibility]);
+  }, [handleContextPanelBack, hasActiveTopology, panelVisibility]);
 
   const canvasProps = React.useMemo<CanvasPropsWithoutGraph>(
     () => ({
-      isContextPanelOpen: panelVisibility.isContextPanelOpen,
+      topologyViewportKey,
+      isContextPanelOpen: hasActiveTopology && panelVisibility.isContextPanelOpen,
       onPaneClick: handleEmptyCanvasClick,
       layout: layoutControls.layout,
       isGeoLayout: layoutControls.isGeoLayout,
@@ -1354,6 +1472,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       onLockedAction: handleLockedAction
     }),
     [
+      topologyViewportKey,
+      hasActiveTopology,
       panelVisibility.isContextPanelOpen,
       handleEmptyCanvasClick,
       layoutControls.layout,
@@ -1405,13 +1525,56 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [sendCancelLabLifecycle]);
 
   const handleToggleSplit = React.useCallback(() => {
+    if (!hasActiveTopology) {
+      return;
+    }
     panelVisibility.handleOpenContextPanel("manual");
     setPaletteTabRequest({ tabId: "yaml" });
-  }, [panelVisibility]);
+  }, [hasActiveTopology, panelVisibility]);
   const isBulkLinkModalOpen = shouldShowBulkLinkModal(
+    hasActiveTopology,
     panelVisibility.showBulkLinkModal,
     isProcessing
   );
+
+  React.useEffect(() => {
+    if (hasActiveTopology) {
+      return;
+    }
+    if (!panelVisibility.isContextPanelOpen) {
+      panelVisibility.handleOpenContextPanel("manual");
+    }
+    if (panelVisibility.findPopoverPosition !== null) {
+      panelVisibility.handleCloseFindPopover();
+    }
+    if (panelVisibility.showLabSettingsModal) {
+      panelVisibility.handleCloseLabSettings();
+    }
+    if (panelVisibility.showSvgExportModal) {
+      panelVisibility.handleCloseSvgExport();
+    }
+    if (panelVisibility.showBulkLinkModal) {
+      panelVisibility.handleCloseBulkLink();
+    }
+  }, [hasActiveTopology, panelVisibility]);
+
+  const previousHasActiveTopology = React.useRef(hasActiveTopology);
+  React.useEffect(() => {
+    const becameActive = !previousHasActiveTopology.current && hasActiveTopology;
+    previousHasActiveTopology.current = hasActiveTopology;
+
+    if (!becameActive || !panelVisibility.isContextPanelOpen) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      useCanvasStore.getState().requestFitView();
+    }, 280);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [hasActiveTopology, panelVisibility.isContextPanelOpen]);
 
   const handleLinkLabelModeChange = React.useCallback(
     (mode: Parameters<typeof topoActions.setLinkLabelMode>[0]) => {
@@ -1444,6 +1607,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           runtimeRef={annotationRuntimeRef}
         />
         <Navbar
+          hasActiveTopology={hasActiveTopology}
           onZoomToFit={handleZoomToFit}
           layout={layoutControls.layout}
           onLayoutChange={layoutControls.setLayout}
@@ -1484,7 +1648,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 overflow: "hidden"
               }}
             >
-              <ContainerlabExplorerView />
+              <DeferredDevExplorerView />
               <Box
                 onMouseDown={handleDevExplorerResizeStart}
                 sx={{
@@ -1506,125 +1670,127 @@ export const AppContent: React.FC<AppContentProps> = ({
               />
             </Box>
           )}
-          <ContextPanel
-            isOpen={panelVisibility.isContextPanelOpen}
-            side={panelVisibility.panelSide}
-            onOpen={panelVisibility.handleOpenContextPanel}
-            onClose={panelVisibility.handleCloseContextPanel}
-            onBack={handleContextPanelBack}
-            onToggleSide={panelVisibility.handleTogglePanelSide}
-            rfInstance={rfInstance}
-            palette={{
-              mode: state.mode,
-              requestedTab: paletteTabRequest,
+          {hasActiveTopology && (
+            <ContextPanel
+              isOpen={panelVisibility.isContextPanelOpen}
+              side={panelVisibility.panelSide}
+              onOpen={panelVisibility.handleOpenContextPanel}
+              onClose={panelVisibility.handleCloseContextPanel}
+              onBack={handleContextPanelBack}
+              onToggleSide={panelVisibility.handleTogglePanelSide}
+              rfInstance={rfInstance}
+              palette={{
+                mode: state.mode,
+                requestedTab: paletteTabRequest,
 
-              onEditCustomNode: customNodeCommands.onEditCustomNode,
-              onDeleteCustomNode: customNodeCommands.onDeleteCustomNode,
-              onSetDefaultCustomNode: customNodeCommands.onSetDefaultCustomNode
-            }}
-            view={{
-              selectedNodeData: selectionData.selectedNodeData,
-              selectedLinkData: selectionData.selectedLinkData
-            }}
-            editor={{
-              editingNodeData: selectionData.editingNodeData,
-              editingNodeInheritedProps: selectionData.editingNodeInheritedProps,
-              selectedNodeVisualData: enableSelectedNodeVisualEditor
-                ? selectionData.selectedNodeEditorData
-                : null,
-              selectedNodeVisualInheritedProps: enableSelectedNodeVisualEditor
-                ? selectionData.selectedNodeInheritedProps
-                : [],
-              enableSelectedNodeVisualEditor,
-              nodeEditorHandlers: {
-                handleClose: nodeEditorHandlers.handleClose,
-                handleSave: nodeEditorHandlers.handleSave,
-                handleApply: nodeEditorHandlers.handleApply,
-                previewVisuals: nodeEditorHandlers.previewVisuals,
-                handleDelete: selectionData.editingNodeData
-                  ? () => graphHandlers.handleDeleteNode(selectionData.editingNodeData!.id)
-                  : undefined
-              },
-              editingLinkData: selectionData.editingLinkData,
-              linkEditorHandlers: {
-                handleClose: linkEditorHandlers.handleClose,
-                handleSave: linkEditorHandlers.handleSave,
-                handleApply: linkEditorHandlers.handleApply,
-                previewOffset: linkEditorHandlers.previewOffset,
-                revertOffset: linkEditorHandlers.revertOffset,
-                handleDelete: selectionData.editingLinkData
-                  ? () => graphHandlers.handleDeleteLink(selectionData.editingLinkData!.id)
-                  : undefined
-              },
-              editingNetworkData: selectionData.editingNetworkData,
-              networkEditorHandlers: {
-                handleClose: networkEditorHandlers.handleClose,
-                handleSave: handleNetworkSave,
-                handleApply: handleNetworkApply
-              },
-              linkImpairmentData: selectionData.selectedLinkImpairmentData,
-              linkImpairmentHandlers: {
-                onError: handleLinkImpairmentError,
-                onApply: handleLinkImpairmentApply,
-                onSave: handleLinkImpairmentSave,
-                onClose: () => topoActions.editImpairment(null)
-              },
-              editingTextAnnotation: annotationUiState.editingTextAnnotation,
-              textAnnotationHandlers: {
-                onSave: annotationActions.saveTextAnnotation,
-                onPreview: (annotation) => {
-                  const exists =
-                    annotationRuntimeRef.current?.textAnnotations.some(
-                      (entry) => entry.id === annotation.id
-                    ) ?? false;
-                  if (exists) {
-                    annotationActions.updateTextAnnotation(annotation.id, annotation);
-                    return true;
-                  }
-                  annotationActions.previewTextAnnotation(annotation);
-                  return false;
+                onEditCustomNode: customNodeCommands.onEditCustomNode,
+                onDeleteCustomNode: customNodeCommands.onDeleteCustomNode,
+                onSetDefaultCustomNode: customNodeCommands.onSetDefaultCustomNode
+              }}
+              view={{
+                selectedNodeData: selectionData.selectedNodeData,
+                selectedLinkData: selectionData.selectedLinkData
+              }}
+              editor={{
+                editingNodeData: selectionData.editingNodeData,
+                editingNodeInheritedProps: selectionData.editingNodeInheritedProps,
+                selectedNodeVisualData: enableSelectedNodeVisualEditor
+                  ? selectionData.selectedNodeEditorData
+                  : null,
+                selectedNodeVisualInheritedProps: enableSelectedNodeVisualEditor
+                  ? selectionData.selectedNodeInheritedProps
+                  : [],
+                enableSelectedNodeVisualEditor,
+                nodeEditorHandlers: {
+                  handleClose: nodeEditorHandlers.handleClose,
+                  handleSave: nodeEditorHandlers.handleSave,
+                  handleApply: nodeEditorHandlers.handleApply,
+                  previewVisuals: nodeEditorHandlers.previewVisuals,
+                  handleDelete: selectionData.editingNodeData
+                    ? () => graphHandlers.handleDeleteNode(selectionData.editingNodeData!.id)
+                    : undefined
                 },
-                onPreviewDelete: annotationActions.removePreviewTextAnnotation,
-                onClose: annotationUiActions.closeTextEditor,
-                onDelete: annotationActions.deleteTextAnnotation
-              },
-              editingShapeAnnotation: annotationUiState.editingShapeAnnotation,
-              shapeAnnotationHandlers: {
-                onSave: annotationActions.saveShapeAnnotation,
-                onPreview: (annotation) => {
-                  const exists =
-                    annotationRuntimeRef.current?.shapeAnnotations.some(
-                      (entry) => entry.id === annotation.id
-                    ) ?? false;
-                  if (exists) {
-                    annotationActions.updateShapeAnnotation(annotation.id, annotation);
-                    return true;
-                  }
-                  annotationActions.previewShapeAnnotation(annotation);
-                  return false;
+                editingLinkData: selectionData.editingLinkData,
+                linkEditorHandlers: {
+                  handleClose: linkEditorHandlers.handleClose,
+                  handleSave: linkEditorHandlers.handleSave,
+                  handleApply: linkEditorHandlers.handleApply,
+                  previewOffset: linkEditorHandlers.previewOffset,
+                  revertOffset: linkEditorHandlers.revertOffset,
+                  handleDelete: selectionData.editingLinkData
+                    ? () => graphHandlers.handleDeleteLink(selectionData.editingLinkData!.id)
+                    : undefined
                 },
-                onPreviewDelete: annotationActions.removePreviewShapeAnnotation,
-                onClose: annotationUiActions.closeShapeEditor,
-                onDelete: annotationActions.deleteShapeAnnotation
-              },
-              editingTrafficRateAnnotation: annotationUiState.editingTrafficRateAnnotation,
-              trafficRateAnnotationHandlers: {
-                onSave: annotationActions.saveTrafficRateAnnotation,
-                onPreview: (annotation) => {
-                  annotationActions.updateTrafficRateAnnotation(annotation.id, annotation);
+                editingNetworkData: selectionData.editingNetworkData,
+                networkEditorHandlers: {
+                  handleClose: networkEditorHandlers.handleClose,
+                  handleSave: handleNetworkSave,
+                  handleApply: handleNetworkApply
                 },
-                onClose: annotationUiActions.closeTrafficRateEditor,
-                onDelete: annotationActions.deleteTrafficRateAnnotation
-              },
-              editingGroup: annotationUiState.editingGroup,
-              groupHandlers: {
-                onSave: annotationActions.saveGroup,
-                onClose: annotationUiActions.closeGroupEditor,
-                onDelete: annotationActions.deleteGroup,
-                onStylePreview: annotationActions.updateGroup
-              }
-            }}
-          />
+                linkImpairmentData: selectionData.selectedLinkImpairmentData,
+                linkImpairmentHandlers: {
+                  onError: handleLinkImpairmentError,
+                  onApply: handleLinkImpairmentApply,
+                  onSave: handleLinkImpairmentSave,
+                  onClose: () => topoActions.editImpairment(null)
+                },
+                editingTextAnnotation: annotationUiState.editingTextAnnotation,
+                textAnnotationHandlers: {
+                  onSave: annotationActions.saveTextAnnotation,
+                  onPreview: (annotation) => {
+                    const exists =
+                      annotationRuntimeRef.current?.textAnnotations.some(
+                        (entry) => entry.id === annotation.id
+                      ) ?? false;
+                    if (exists) {
+                      annotationActions.updateTextAnnotation(annotation.id, annotation);
+                      return true;
+                    }
+                    annotationActions.previewTextAnnotation(annotation);
+                    return false;
+                  },
+                  onPreviewDelete: annotationActions.removePreviewTextAnnotation,
+                  onClose: annotationUiActions.closeTextEditor,
+                  onDelete: annotationActions.deleteTextAnnotation
+                },
+                editingShapeAnnotation: annotationUiState.editingShapeAnnotation,
+                shapeAnnotationHandlers: {
+                  onSave: annotationActions.saveShapeAnnotation,
+                  onPreview: (annotation) => {
+                    const exists =
+                      annotationRuntimeRef.current?.shapeAnnotations.some(
+                        (entry) => entry.id === annotation.id
+                      ) ?? false;
+                    if (exists) {
+                      annotationActions.updateShapeAnnotation(annotation.id, annotation);
+                      return true;
+                    }
+                    annotationActions.previewShapeAnnotation(annotation);
+                    return false;
+                  },
+                  onPreviewDelete: annotationActions.removePreviewShapeAnnotation,
+                  onClose: annotationUiActions.closeShapeEditor,
+                  onDelete: annotationActions.deleteShapeAnnotation
+                },
+                editingTrafficRateAnnotation: annotationUiState.editingTrafficRateAnnotation,
+                trafficRateAnnotationHandlers: {
+                  onSave: annotationActions.saveTrafficRateAnnotation,
+                  onPreview: (annotation) => {
+                    annotationActions.updateTrafficRateAnnotation(annotation.id, annotation);
+                  },
+                  onClose: annotationUiActions.closeTrafficRateEditor,
+                  onDelete: annotationActions.deleteTrafficRateAnnotation
+                },
+                editingGroup: annotationUiState.editingGroup,
+                groupHandlers: {
+                  onSave: annotationActions.saveGroup,
+                  onClose: annotationUiActions.closeGroupEditor,
+                  onDelete: annotationActions.deleteGroup,
+                  onStylePreview: annotationActions.updateGroup
+                }
+              }}
+            />
+          )}
           <Box
             component="main"
             sx={{
@@ -1648,37 +1814,49 @@ export const AppContent: React.FC<AppContentProps> = ({
         </Box>
 
         {/* Modals */}
-        <LifecycleProgressModal
-          isOpen={state.lifecycleModalOpen}
-          isProcessing={isProcessing}
-          mode={state.processingMode}
-          status={state.lifecycleStatus}
-          statusMessage={state.lifecycleStatusMessage}
-          labName={state.labName}
-          logs={state.lifecycleLogs}
-          onClose={handleCloseLifecycleModal}
-          onCancel={handleCancelLifecycle}
-        />
-        <LabSettingsModal
-          isOpen={panelVisibility.showLabSettingsModal}
-          onClose={panelVisibility.handleCloseLabSettings}
-          mode={state.mode}
-          isLocked={isInteractionLocked}
-          labSettings={state.labSettings ?? { name: state.labName }}
-          gridLineWidth={layoutControls.gridLineWidth}
-          onGridLineWidthChange={layoutControls.setGridLineWidth}
-          gridStyle={layoutControls.gridStyle}
-          onGridStyleChange={layoutControls.setGridStyle}
-          gridColor={layoutControls.gridColor}
-          onGridColorChange={layoutControls.setGridColor}
-          gridBgColor={layoutControls.gridBgColor}
-          onGridBgColorChange={layoutControls.setGridBgColor}
-          onResetGridColors={layoutControls.resetGridColors}
-        />
-        <ShortcutsModal
-          isOpen={panelVisibility.showShortcutsModal}
-          onClose={panelVisibility.handleCloseShortcuts}
-        />
+        {state.lifecycleModalOpen || isProcessing ? (
+          <React.Suspense fallback={null}>
+            <LazyLifecycleProgressModal
+              isOpen={state.lifecycleModalOpen}
+              isProcessing={isProcessing}
+              mode={state.processingMode}
+              status={state.lifecycleStatus}
+              statusMessage={state.lifecycleStatusMessage}
+              labName={state.labName}
+              logs={state.lifecycleLogs}
+              onClose={handleCloseLifecycleModal}
+              onCancel={handleCancelLifecycle}
+            />
+          </React.Suspense>
+        ) : null}
+        {panelVisibility.showLabSettingsModal ? (
+          <React.Suspense fallback={null}>
+            <LazyLabSettingsModal
+              isOpen={panelVisibility.showLabSettingsModal}
+              onClose={panelVisibility.handleCloseLabSettings}
+              mode={state.mode}
+              isLocked={isInteractionLocked}
+              labSettings={state.labSettings ?? { name: state.labName }}
+              gridLineWidth={layoutControls.gridLineWidth}
+              onGridLineWidthChange={layoutControls.setGridLineWidth}
+              gridStyle={layoutControls.gridStyle}
+              onGridStyleChange={layoutControls.setGridStyle}
+              gridColor={layoutControls.gridColor}
+              onGridColorChange={layoutControls.setGridColor}
+              gridBgColor={layoutControls.gridBgColor}
+              onGridBgColorChange={layoutControls.setGridBgColor}
+              onResetGridColors={layoutControls.resetGridColors}
+            />
+          </React.Suspense>
+        ) : null}
+        {panelVisibility.showShortcutsModal ? (
+          <React.Suspense fallback={null}>
+            <LazyShortcutsModal
+              isOpen={panelVisibility.showShortcutsModal}
+              onClose={panelVisibility.handleCloseShortcuts}
+            />
+          </React.Suspense>
+        ) : null}
         {panelVisibility.showSvgExportModal && (
           <SvgExportModalContainer
             onClose={panelVisibility.handleCloseSvgExport}
@@ -1687,23 +1865,35 @@ export const AppContent: React.FC<AppContentProps> = ({
             customIcons={getCustomIconMap(state.customIcons)}
           />
         )}
-        <BulkLinkModal
-          isOpen={isBulkLinkModalOpen}
-          mode={interactionMode}
-          isLocked={isInteractionLocked}
-          onClose={panelVisibility.handleCloseBulkLink}
-        />
-        <AboutModal
-          isOpen={panelVisibility.showAboutPanel}
-          onClose={panelVisibility.handleCloseAbout}
-        />
+        {isBulkLinkModalOpen ? (
+          <React.Suspense fallback={null}>
+            <LazyBulkLinkModal
+              isOpen={isBulkLinkModalOpen}
+              mode={interactionMode}
+              isLocked={isInteractionLocked}
+              onClose={panelVisibility.handleCloseBulkLink}
+            />
+          </React.Suspense>
+        ) : null}
+        {panelVisibility.showAboutPanel ? (
+          <React.Suspense fallback={null}>
+            <LazyAboutModal
+              isOpen={panelVisibility.showAboutPanel}
+              onClose={panelVisibility.handleCloseAbout}
+            />
+          </React.Suspense>
+        ) : null}
 
         {/* Popovers */}
-        <FindNodePopover
-          anchorPosition={panelVisibility.findPopoverPosition}
-          onClose={panelVisibility.handleCloseFindPopover}
-          rfInstance={rfInstance}
-        />
+        {panelVisibility.findPopoverPosition ? (
+          <React.Suspense fallback={null}>
+            <LazyFindNodePopover
+              anchorPosition={panelVisibility.findPopoverPosition}
+              onClose={panelVisibility.handleCloseFindPopover}
+              rfInstance={rfInstance}
+            />
+          </React.Suspense>
+        ) : null}
       </Box>
     </MuiThemeProvider>
   );

@@ -166,6 +166,8 @@ export interface ReactFlowCanvasProps {
   nodes?: TopoNode[];
   /** ReactFlow edges */
   edges?: TopoEdge[];
+  /** Stable key for the currently active topology, used to preserve per-topology viewport */
+  topologyViewportKey?: string | null;
   /** Whether the left ContextPanel (palette) is currently open */
   isContextPanelOpen?: boolean;
   /** Current layout (used for geo layout transitions) */

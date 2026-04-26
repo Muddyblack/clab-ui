@@ -1,10 +1,11 @@
 /**
  * useSchema - Hook to access containerlab schema data for kind/type options
  *
- * Schema data is loaded by the extension and passed via window.__SCHEMA_DATA__
+ * Hosts can override bundled schema data via window.__SCHEMA_DATA__.
  */
 import { useState, useEffect, useMemo, useCallback } from "react";
 
+import { defaultSchemaData } from "../../core/schema";
 import { log } from "../../utils/logger";
 
 /**
@@ -66,24 +67,20 @@ export function useSchema(): UseSchemaResult {
     error: null
   });
 
-  // Load schema data from window on mount
+  // Load host-provided schema data or fall back to the bundled containerlab schema.
   useEffect(() => {
-    const data = window.__SCHEMA_DATA__;
+    const data = window.__SCHEMA_DATA__ ?? defaultSchemaData;
 
-    if (!data) {
-      log.warn("Schema data not available");
-      setSchemaData((prev) => ({ ...prev, isLoaded: true }));
-      return;
-    }
-
-    const kinds = data.kinds;
+    const kinds = Array.isArray(data.kinds) ? data.kinds : [];
     const typesByKind = new Map<string, string[]>();
     const kindsWithTypeSupport = new Set<string>();
 
     // Convert Record to Map and build kindsWithTypeSupport set
-    for (const [kind, types] of Object.entries(data.typesByKind)) {
-      typesByKind.set(kind, types);
-      kindsWithTypeSupport.add(kind);
+    for (const [kind, types] of Object.entries(data.typesByKind ?? {})) {
+      if (Array.isArray(types)) {
+        typesByKind.set(kind, types);
+        kindsWithTypeSupport.add(kind);
+      }
     }
 
     // Get SROS component types

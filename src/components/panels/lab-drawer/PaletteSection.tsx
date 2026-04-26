@@ -1,28 +1,26 @@
 // Node and annotation palette for the context panel.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AccountTree as AccountTreeIcon,
-  Add as AddIcon,
-  Cable as CableIcon,
-  CircleOutlined as CircleOutlinedIcon,
-  Clear as ClearIcon,
-  CropSquare as CropSquareIcon,
-  Delete as DeleteIcon,
-  Save as SaveIcon,
-  DeviceHub as DeviceHubIcon,
-  Dns as DnsIcon,
-  Edit as EditIcon,
-  Hub as HubIcon,
-  Lan as LanIcon,
-  Power as PowerIcon,
-  Remove as RemoveIcon,
-  Search as SearchIcon,
-  SelectAll as SelectAllIcon,
-  Speed as SpeedIcon,
-  Star as StarIcon,
-  StarOutline as StarOutlineIcon,
-  TextFields as TextFieldsIcon
-} from "@mui/icons-material";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import AddIcon from "@mui/icons-material/Add";
+import CableIcon from "@mui/icons-material/Cable";
+import CircleOutlinedIcon from "@mui/icons-material/CircleOutlined";
+import ClearIcon from "@mui/icons-material/Clear";
+import CropSquareIcon from "@mui/icons-material/CropSquare";
+import DeleteIcon from "@mui/icons-material/Delete";
+import DeviceHubIcon from "@mui/icons-material/DeviceHub";
+import DnsIcon from "@mui/icons-material/Dns";
+import EditIcon from "@mui/icons-material/Edit";
+import HubIcon from "@mui/icons-material/Hub";
+import LanIcon from "@mui/icons-material/Lan";
+import PowerIcon from "@mui/icons-material/Power";
+import RemoveIcon from "@mui/icons-material/Remove";
+import SaveIcon from "@mui/icons-material/Save";
+import SearchIcon from "@mui/icons-material/Search";
+import SelectAllIcon from "@mui/icons-material/SelectAll";
+import SpeedIcon from "@mui/icons-material/Speed";
+import StarIcon from "@mui/icons-material/Star";
+import StarOutlineIcon from "@mui/icons-material/StarOutline";
+import TextFieldsIcon from "@mui/icons-material/TextFields";
 import {
   Box,
   Button,
@@ -48,9 +46,9 @@ import { buildCustomIconMap } from "../../../utils/iconUtils";
 import type { TabDefinition } from "../../ui/editor";
 import { TabNavigation } from "../../ui/editor/TabNavigation";
 import { IconPreview } from "../../ui/form";
-import { MonacoCodeEditor } from "../../monaco/MonacoCodeEditor";
 import { executeTopologyCommand } from "../../../services/topologyHostCommands";
 import clabSchema from "../../../../schema/clab.schema.json";
+import { preloadMonacoCodeEditor } from "../../monaco/preloadMonacoCodeEditor";
 
 interface PaletteSectionProps {
   mode?: "edit" | "view";
@@ -132,6 +130,13 @@ function getTemplateIconUrl(
 const REACTFLOW_NODE_MIME_TYPE = "application/reactflow-node";
 const ACTION_HOVER_BG = "action.hover";
 const TEXT_SECONDARY = "text.secondary";
+const MONACO_PRELOAD_DELAY_MS = 750;
+
+function isSourceTab(tabId: string): boolean {
+  return tabId === "yaml" || tabId === "json";
+}
+
+const MonacoCodeEditor = React.lazy(preloadMonacoCodeEditor);
 
 const SourceEditorTab: React.FC<{
   readOnly: boolean;
@@ -148,13 +153,29 @@ const SourceEditorTab: React.FC<{
       </Typography>
     )}
     <Box sx={{ flex: 1, minHeight: 0 }}>
-      <MonacoCodeEditor
-        language={language}
-        value={value}
-        readOnly={readOnly}
-        jsonSchema={jsonSchema}
-        onChange={readOnly ? undefined : onChange}
-      />
+      <Suspense
+        fallback={
+          <Box
+            sx={{
+              alignItems: "center",
+              color: TEXT_SECONDARY,
+              display: "flex",
+              height: "100%",
+              justifyContent: "center"
+            }}
+          >
+            <Typography variant="caption">Loading editor...</Typography>
+          </Box>
+        }
+      >
+        <MonacoCodeEditor
+          language={language}
+          value={value}
+          readOnly={readOnly}
+          jsonSchema={jsonSchema}
+          onChange={readOnly ? undefined : onChange}
+        />
+      </Suspense>
     </Box>
   </Box>
 );
@@ -459,6 +480,46 @@ export const PaletteSection: React.FC<PaletteSectionProps> = ({
 
   const activeTab = userTab;
 
+  useEffect(() => {
+    let idleCallbackId: number | null = null;
+    const timerId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleCallbackId = window.requestIdleCallback(
+          () => {
+            void preloadMonacoCodeEditor();
+          },
+          { timeout: 2500 }
+        );
+        return;
+      }
+      void preloadMonacoCodeEditor();
+    }, MONACO_PRELOAD_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timerId);
+      if (idleCallbackId !== null && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isSourceTab(activeTab)) {
+      void preloadMonacoCodeEditor();
+    }
+  }, [activeTab]);
+
+  const handleSourceTabIntent = useCallback((event: React.SyntheticEvent<HTMLElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const tabId = target.closest<HTMLElement>("[data-tab]")?.dataset.tab;
+    if (tabId !== undefined && isSourceTab(tabId)) {
+      void preloadMonacoCodeEditor();
+    }
+  }, []);
+
   const [yamlError, setYamlError] = useState<string | null>(null);
   const [annotationsError, setAnnotationsError] = useState<string | null>(null);
   const [yamlDraft, setYamlDraft] = useState<string>(yamlContent);
@@ -605,16 +666,21 @@ export const PaletteSection: React.FC<PaletteSectionProps> = ({
         )}
       </Box>
       <Divider />
-      <TabNavigation
-        tabs={visibleTabs}
-        activeTab={activeTab}
-        onTabChange={(id) => {
-          if (activeTab === "edit" && id !== "edit") {
-            onEditTabLeave?.();
-          }
-          setUserTab(id);
-        }}
-      />
+      <Box onPointerOver={handleSourceTabIntent} onFocusCapture={handleSourceTabIntent}>
+        <TabNavigation
+          tabs={visibleTabs}
+          activeTab={activeTab}
+          onTabChange={(id) => {
+            if (isSourceTab(id)) {
+              void preloadMonacoCodeEditor();
+            }
+            if (activeTab === "edit" && id !== "edit") {
+              onEditTabLeave?.();
+            }
+            setUserTab(id);
+          }}
+        />
+      </Box>
       {(activeTab === "nodes" || activeTab === "annotations") && (
         <Box sx={{ flex: 1, overflow: "auto", minHeight: 0 }}>
           {activeTab === "nodes" && (

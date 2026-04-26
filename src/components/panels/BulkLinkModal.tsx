@@ -13,7 +13,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { Close as CloseIcon } from "@mui/icons-material";
+import CloseIcon from "@mui/icons-material/Close";
 
 import { useTopologySessionClient } from "../../host";
 import { useGraphActions, useGraphStore } from "../../stores/graphStore";

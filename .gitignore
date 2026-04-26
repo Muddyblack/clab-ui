@@ -1,3 +1,11 @@
 node_modules/
 dist/
 out/
+docs-site/
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.nyc_output/

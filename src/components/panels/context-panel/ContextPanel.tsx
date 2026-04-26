@@ -1,13 +1,11 @@
 // Context-sensitive panel with palette, info, and editor tabs.
 import React, { useCallback, useRef, useState } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
-import {
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
-  ErrorOutline as ErrorOutlineIcon,
-  Lock as LockIcon,
-  SwapHoriz as SwapHorizIcon
-} from "@mui/icons-material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import LockIcon from "@mui/icons-material/Lock";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import { Box, Button, Divider, Drawer, Tooltip, Typography } from "@mui/material";
 
 import { useIsLocked } from "../../../stores/topoViewerStore";

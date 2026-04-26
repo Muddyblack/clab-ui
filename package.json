@@ -1,6 +1,6 @@
 {
   "name": "@srl-labs/clab-ui",
-  "version": "0.0.20",
+  "version": "0.0.26",
   "private": false,
   "description": "Shared UI package for containerlab webviews and topology editing.",
   "license": "Apache-2.0",
@@ -13,7 +13,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/srl-labs/clab-ui.git"
+    "url": "git+https://github.com/srl-labs/clab-ui.git"
   },
   "homepage": "https://github.com/srl-labs/clab-ui",
   "bugs": {
@@ -43,6 +43,14 @@
       "types": "./dist/explorer/index.d.ts",
       "import": "./dist/explorer/index.js"
     },
+    "./image-manager": {
+      "types": "./dist/image-manager/index.d.ts",
+      "import": "./dist/image-manager/index.js"
+    },
+    "./image-manager/catalog": {
+      "types": "./dist/image-manager/catalog.d.ts",
+      "import": "./dist/image-manager/catalog.js"
+    },
     "./inspect": {
       "types": "./dist/inspect/index.d.ts",
       "import": "./dist/inspect/index.js"
@@ -68,49 +76,56 @@
     "lint:ts": "oxlint --import-plugin --react-plugin --jsx-a11y-plugin .",
     "lint:ts:fix": "oxlint --import-plugin --react-plugin --jsx-a11y-plugin . --fix --fix-suggestions",
     "test:unit": "node --import tsx --test src/**/*.test.ts src/**/*.test.tsx",
+    "dev:ui-harness": "vite --host 127.0.0.1 --config test/ui-harness/vite.config.ts",
+    "test:browser": "playwright test --config test/ui-harness/playwright.config.ts",
     "pack:preview": "npm pack --dry-run",
     "publish:ui": "npm publish",
     "prepack": "npm run build"
   },
   "peerDependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@fontsource/roboto": "^5.2.9",
-    "@mui/icons-material": "^7.3.8",
-    "@mui/material": "^7.3.8",
-    "@mui/x-charts": "^8.27.0",
-    "@mui/x-tree-view": "^8.27.1",
-    "@xyflow/react": "^12.10.0",
+    "@fontsource/roboto": "^5.2.10",
+    "@mui/icons-material": "^7.3.10",
+    "@mui/material": "^7.3.10",
+    "@mui/x-charts": "^8.28.2",
+    "@mui/x-tree-view": "^8.28.3",
+    "@xyflow/react": "^12.10.2",
     "ajv": "^8.18.0",
     "d3-force": "^3.0.0",
-    "dompurify": "^3.3.1",
+    "dompurify": "^3.4.1",
     "highlight.js": "^11.11.1",
-    "maplibre-gl": "^5.18.0",
+    "maplibre-gl": "^5.24.0",
     "markdown-it": "^14.1.1",
     "markdown-it-emoji": "^3.0.0",
     "monaco-editor": "^0.55.1",
-    "yaml": "^2.8.2",
+    "yaml": "^2.8.3",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/d3-force": "^3.0.10",
     "@types/markdown-it": "^14.1.2",
     "@types/markdown-it-emoji": "^3.0.1",
-    "@types/node": "^25.2.3",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@types/vscode": "^1.99.0",
-    "esbuild": "^0.27.3",
-    "oxlint": "^1.55.0",
+    "@types/vscode": "^1.116.0",
+    "autoprefixer": "^10.5.0",
+    "esbuild": "^0.27.7",
+    "oxlint": "^1.61.0",
     "oxlint-tsgolint": "^0.18.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "tsx": "^4.19.4",
-    "typescript": "^5.9.3"
+    "postcss": "^8.5.10",
+    "postcss-import": "^16.1.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.2"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
