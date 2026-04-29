@@ -17,8 +17,8 @@ import {
   formatSchemaHoverMarkdown,
   getContainerlabYamlCompletionContext,
   getSchemaHoverInfo,
-  getYamlPathAtLine,
-  getYamlCompletionRange
+  getYamlCompletionRange,
+  getYamlPathAtLine
 } from "./yamlLanguageSupport";
 
 declare global {
@@ -611,27 +611,6 @@ function createModelUri(language: "yaml" | "json"): monaco.Uri {
   return monaco.Uri.parse(`file:///containerlab-editor/model-${id}.${suffix}`);
 }
 
-function didInsertYamlSuggestTrigger(event: monaco.editor.IModelContentChangedEvent): boolean {
-  return event.changes.some((change) => {
-    if (change.text.length === 0) return false;
-    const lastChar = change.text.at(-1);
-    return (
-      lastChar !== undefined &&
-      (/[A-Za-z0-9]/.test(lastChar) || "\n:,[]_-".includes(lastChar))
-    );
-  });
-}
-
-function isYamlSuggestContext(model: monaco.editor.ITextModel, position: monaco.Position): boolean {
-  const linePrefix = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
-  return (
-    /^\s*(?:-\s*)?[A-Za-z0-9_.|-]*$/.test(linePrefix) ||
-    /:\s*["']?[A-Za-z0-9_.|-]*$/.test(linePrefix) ||
-    /\[\s*["']?[A-Za-z0-9_.|-]*$/.test(linePrefix) ||
-    /,\s*["']?[A-Za-z0-9_.|-]*$/.test(linePrefix)
-  );
-}
-
 export interface MonacoCodeEditorProps {
   value: string;
   language: "yaml" | "json";
@@ -657,7 +636,6 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   const applyingExternalRef = useRef(false);
   const lastExternalAppliedRef = useRef<string>(value);
   const validationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jsonSchemaRef = useRef(jsonSchema);
   const suggestionsEnabledRef = useRef(suggestionsEnabled);
   const isDevMock = host.meta?.isDevMock === true;
@@ -691,38 +669,6 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       monaco.editor.setModelMarkers(model, MARKER_OWNER, validateYaml(model.getValue(), schema));
     }, VALIDATION_DEBOUNCE_MS);
   }, [language]);
-
-  const scheduleYamlSuggestions = useCallback(
-    (event?: monaco.editor.IModelContentChangedEvent) => {
-      if (language !== "yaml") return;
-      if (!suggestionsEnabledRef.current) {
-        const editor = editorRef.current;
-        if (editor) hideSuggestWidget(editor);
-        return;
-      }
-      if (event && !didInsertYamlSuggestTrigger(event)) return;
-      const editor = editorRef.current;
-      const model = modelRef.current;
-      if (!editor || !model || !editor.hasTextFocus()) return;
-      const position = editor.getPosition();
-      if (!position || !isYamlSuggestContext(model, position)) return;
-      if (buildYamlCompletionItems(model, position).length === 0) return;
-
-      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
-      suggestTimerRef.current = setTimeout(() => {
-        if (!suggestionsEnabledRef.current) {
-          hideSuggestWidget(editor);
-          return;
-        }
-        if (!editor.hasTextFocus()) return;
-        const latestPosition = editor.getPosition();
-        if (!latestPosition || !isYamlSuggestContext(model, latestPosition)) return;
-        if (buildYamlCompletionItems(model, latestPosition).length === 0) return;
-        editor.trigger("containerlab-yaml", "editor.action.triggerSuggest", {});
-      }, event ? 75 : 150);
-    },
-    [language]
-  );
 
   useEffect(() => {
     ensureMonacoConfiguredOnce();
@@ -791,14 +737,12 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       links: true,
       formatOnPaste: false,
       formatOnType: false,
-      acceptSuggestionOnEnter: "on",
+      acceptSuggestionOnEnter: suggestionsEnabled ? "on" : "off",
       tabCompletion: "off",
       hover: { enabled: true, delay: 300 },
-      quickSuggestions:
-        suggestionsEnabled && language === "yaml"
-          ? { other: true, comments: false, strings: true }
-          : suggestionsEnabled,
-      suggestOnTriggerCharacters: suggestionsEnabled,
+      inlineSuggest: { enabled: false },
+      quickSuggestions: false,
+      suggestOnTriggerCharacters: false,
       suggest: {
         showProperties: true,
         showWords: false,
@@ -842,18 +786,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       };
     }
 
-    const disposable = editor.onDidChangeModelContent((event) => {
+    const disposable = editor.onDidChangeModelContent(() => {
       if (applyingExternalRef.current) return;
       const next = editor.getValue();
       if (onChange !== undefined) onChange(next);
       scheduleValidation();
-      scheduleYamlSuggestions(event);
-    });
-    const cursorDisposable = editor.onDidChangeCursorSelection(() => {
-      scheduleYamlSuggestions();
-    });
-    const focusDisposable = editor.onDidFocusEditorText(() => {
-      scheduleYamlSuggestions();
     });
 
     // -----------------------------------------------------------------------
@@ -917,8 +854,6 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       }
       plainSpaceKeyDisposable.dispose();
       disabledSuggestSuppressor.dispose();
-      cursorDisposable.dispose();
-      focusDisposable.dispose();
       disposable.dispose();
       editorRef.current?.dispose();
       editorRef.current = null;
@@ -932,7 +867,6 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         delete window.__clabMonacoDebug;
       }
       if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
-      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDevMock]);
@@ -944,17 +878,13 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     setModelCompletionsEnabled(model, suggestionsEnabled);
     editor.updateOptions({
-      quickSuggestions:
-        suggestionsEnabled && language === "yaml"
-          ? { other: true, comments: false, strings: true }
-          : suggestionsEnabled,
-      suggestOnTriggerCharacters: suggestionsEnabled,
+      inlineSuggest: { enabled: false },
+      quickSuggestions: false,
+      suggestOnTriggerCharacters: false,
       acceptSuggestionOnEnter: suggestionsEnabled ? "on" : "off"
     });
 
     if (!suggestionsEnabled) {
-      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
-      suggestTimerRef.current = null;
       hideSuggestWidget(editor);
       window.setTimeout(() => {
         if (!suggestionsEnabledRef.current) hideSuggestWidget(editor);
@@ -962,10 +892,8 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       window.setTimeout(() => {
         if (!suggestionsEnabledRef.current) hideSuggestWidget(editor);
       }, 75);
-    } else {
-      scheduleYamlSuggestions();
     }
-  }, [language, scheduleYamlSuggestions, suggestionsEnabled]);
+  }, [suggestionsEnabled]);
 
   useEffect(() => {
     const editor = editorRef.current;

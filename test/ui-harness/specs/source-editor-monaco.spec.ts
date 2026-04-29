@@ -153,13 +153,17 @@ function isRedDominant(background: string): boolean {
 }
 
 test.describe("Monaco YAML source editor", () => {
-  test("shows schema markers and autocomplete suggestions", async ({ page, topoViewerPage }) => {
+  test("shows schema markers, manual completion suggestions, and hover help", async ({
+    page,
+    topoViewerPage
+  }) => {
     await topoViewerPage.resetFiles();
     await topoViewerPage.gotoFile(TOPOLOGY_FILE);
     await topoViewerPage.waitForCanvasReady();
     await topoViewerPage.setEditMode();
     await topoViewerPage.unlock();
     await openYamlEditor(page);
+    await expect(page.getByTestId("source-editor-suggestions-toggle")).toHaveCount(0);
 
     await setEditorValue(page, "topology:\n  nodes:\n    srl1:\n      kind: nokia_srlinux\n", 4, 26);
     await selectEditorRange(page, {
@@ -227,12 +231,16 @@ test.describe("Monaco YAML source editor", () => {
     await page.keyboard.press("Escape");
 
     await setEditorValue(page, "topology:\n  nodes:\n    srl1:\n      kind: ", 4, 13);
+    await expect(page.locator(".suggest-widget")).toBeHidden({ timeout: 1000 });
+    await triggerSuggest(page);
     await expect(page.locator(".suggest-widget")).toBeVisible({ timeout: 5000 });
     await expect(page.locator(".suggest-widget").getByText("6wind_vsr")).toBeVisible();
 
     await page.keyboard.press("Escape");
     await setEditorValue(page, "topology:\n  nodes:\n    srl1:\n      kind: ", 4, 13);
     await page.keyboard.type("n");
+    await expect(page.locator(".suggest-widget")).toBeHidden({ timeout: 1000 });
+    await triggerSuggest(page);
     await expect(page.locator(".suggest-widget")).toBeVisible({ timeout: 5000 });
     await expect(page.locator(".suggest-widget").getByText("nokia_srlinux")).toBeVisible();
 
@@ -300,41 +308,6 @@ test.describe("Monaco YAML source editor", () => {
     await setEditorValue(page, nestedUnknown, 5, 9);
     await triggerSuggest(page);
     await expect(page.locator(".suggest-widget")).not.toContainText("topology");
-  });
-
-  test("can disable and re-enable YAML suggestions from the toolbar", async ({
-    page,
-    topoViewerPage
-  }) => {
-    await topoViewerPage.resetFiles();
-    await topoViewerPage.gotoFile(TOPOLOGY_FILE);
-    await topoViewerPage.waitForCanvasReady();
-    await topoViewerPage.setEditMode();
-    await topoViewerPage.unlock();
-    await openYamlEditor(page);
-
-    const suggestionsToggle = page.getByTestId("source-editor-suggestions-toggle");
-    await expect(suggestionsToggle).toBeVisible();
-
-    await setEditorValue(page, "topology:\n  nodes:\n    srl1:\n      kind: ", 4, 13);
-    await expect(page.locator(".suggest-widget")).toBeVisible({ timeout: 5000 });
-
-    await suggestionsToggle.click();
-    await expect(suggestionsToggle).toHaveAccessibleName("Enable suggestions");
-    await expect(page.locator(".suggest-widget")).toBeHidden({ timeout: 1000 });
-    await setEditorValue(page, "topology:\n  nodes:\n    srl1:\n      kind: ", 4, 13);
-    await triggerSuggest(page);
-    await expect(page.locator(".suggest-widget")).toBeHidden({ timeout: 1000 });
-    await page.keyboard.press("Control+Space");
-    await expect(page.locator(".suggest-widget")).toBeHidden({ timeout: 1000 });
-    await page.keyboard.type("n");
-    await expect(page.locator(".suggest-widget")).toBeHidden({ timeout: 1000 });
-
-    await suggestionsToggle.click();
-    await expect(suggestionsToggle).toHaveAccessibleName("Disable suggestions");
-    await setEditorValue(page, "topology:\n  nodes:\n    srl1:\n      kind: ", 4, 13);
-    await expect(page.locator(".suggest-widget")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator(".suggest-widget").getByText("6wind_vsr")).toBeVisible();
   });
 
   test("preserves pasted indentation and undoes a paste as one edit", async ({

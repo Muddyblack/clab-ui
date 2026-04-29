@@ -12,8 +12,6 @@ import DnsIcon from "@mui/icons-material/Dns";
 import EditIcon from "@mui/icons-material/Edit";
 import HubIcon from "@mui/icons-material/Hub";
 import LanIcon from "@mui/icons-material/Lan";
-import LightbulbIcon from "@mui/icons-material/Lightbulb";
-import LightbulbOutlinedIcon from "@mui/icons-material/LightbulbOutlined";
 import PowerIcon from "@mui/icons-material/Power";
 import RemoveIcon from "@mui/icons-material/Remove";
 import SaveIcon from "@mui/icons-material/Save";
@@ -145,10 +143,9 @@ const SourceEditorTab: React.FC<{
   error: string | null;
   language: "yaml" | "json";
   value: string;
-  suggestionsEnabled?: boolean;
   jsonSchema?: object;
   onChange: (next: string) => void;
-}> = ({ readOnly, error, language, value, suggestionsEnabled = true, jsonSchema, onChange }) => (
+}> = ({ readOnly, error, language, value, jsonSchema, onChange }) => (
   <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
     {error !== null && error.length > 0 && (
       <Typography variant="caption" color="error" sx={{ px: 2, py: 0.5 }}>
@@ -175,7 +172,6 @@ const SourceEditorTab: React.FC<{
           language={language}
           value={value}
           readOnly={readOnly}
-          suggestionsEnabled={suggestionsEnabled}
           jsonSchema={jsonSchema}
           onChange={readOnly ? undefined : onChange}
         />
@@ -530,7 +526,6 @@ export const PaletteSection: React.FC<PaletteSectionProps> = ({
   const [annotationsDraft, setAnnotationsDraft] = useState<string>(annotationsContent);
   const [yamlDirty, setYamlDirty] = useState(false);
   const [annotationsDirty, setAnnotationsDirty] = useState(false);
-  const [yamlSuggestionsEnabled, setYamlSuggestionsEnabled] = useState(true);
   const isSourceReadOnly = isLocked;
 
   // Sync drafts with host unless user has local edits
@@ -647,21 +642,6 @@ export const PaletteSection: React.FC<PaletteSectionProps> = ({
         )}
         {activeTab === "yaml" && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-            <Tooltip title={yamlSuggestionsEnabled ? "Disable suggestions" : "Enable suggestions"}>
-              <IconButton
-                size="small"
-                onClick={() => setYamlSuggestionsEnabled((enabled) => !enabled)}
-                color={yamlSuggestionsEnabled ? "primary" : "default"}
-                aria-label={yamlSuggestionsEnabled ? "Disable suggestions" : "Enable suggestions"}
-                data-testid="source-editor-suggestions-toggle"
-              >
-                {yamlSuggestionsEnabled ? (
-                  <LightbulbIcon fontSize="small" />
-                ) : (
-                  <LightbulbOutlinedIcon fontSize="small" />
-                )}
-              </IconButton>
-            </Tooltip>
             {!isSourceReadOnly && (
               <IconButton
                 size="small"
@@ -853,7 +833,6 @@ export const PaletteSection: React.FC<PaletteSectionProps> = ({
           error={yamlError}
           language="yaml"
           value={yamlDraft}
-          suggestionsEnabled={yamlSuggestionsEnabled}
           jsonSchema={clabSchema}
           onChange={(next) => {
             setYamlDraft(next);
