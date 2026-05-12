@@ -1,6 +1,6 @@
 # 11. Web Route and Proxy Matrix
 
-This page maps `containerlab-web` routes to their real behavior. It is intentionally exact, because this is where browser-hosted drift usually appears.
+This page maps `containerlab-app` routes to their real behavior. It is intentionally exact, because this is where browser-hosted drift usually appears.
 
 ## Auth and endpoint-session routes
 
@@ -131,13 +131,13 @@ Capture-session routes add one extra lookup:
 
 ## Source anchors
 
-- `containerlab-web/server/index.ts`
-- `containerlab-web/server/auth.ts`
-- `containerlab-web/server/fileProxy.ts`
-- `containerlab-web/server/topologyProxy.ts`
-- `containerlab-web/server/labProxy.ts`
-- `containerlab-web/server/runtimeProxy.ts`
-- `containerlab-web/server/eventsProxy.ts`
-- `containerlab-web/server/topologyEventsProxy.ts`
-- `containerlab-web/server/terminalStreamProxy.ts`
-- `containerlab-web/server/captureVncStreamProxy.ts`
+- `containerlab-app/packages/app-server/src/index.ts`
+- `containerlab-app/packages/app-server/src/auth.ts`
+- `containerlab-app/packages/app-server/src/fileProxy.ts`
+- `containerlab-app/packages/app-server/src/topologyProxy.ts`
+- `containerlab-app/packages/app-server/src/labProxy.ts`
+- `containerlab-app/packages/app-server/src/runtimeProxy.ts`
+- `containerlab-app/packages/app-server/src/eventsProxy.ts`
+- `containerlab-app/packages/app-server/src/topologyEventsProxy.ts`
+- `containerlab-app/packages/app-server/src/terminalStreamProxy.ts`
+- `containerlab-app/packages/app-server/src/captureVncStreamProxy.ts`

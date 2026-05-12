@@ -8,7 +8,7 @@ This page follows the common request and message paths through the platform.
 sequenceDiagram
     participant User as Browser user
     participant UI as clab-ui in browser
-    participant WEB as containerlab-web
+    participant WEB as containerlab-app
     participant API as clab-api-server
     participant RT as Runtime
 
@@ -25,7 +25,7 @@ sequenceDiagram
 What matters here:
 
 - The browser never talks to the runtime directly.
-- `containerlab-web` translates browser-safe routes into API-server calls.
+- `containerlab-app` translates browser-safe routes into API-server calls.
 - Auth, superuser checks, and ownership checks happen in `clab-api-server`, not in `clab-ui`.
 
 ## VS Code-hosted flow
@@ -56,7 +56,7 @@ What matters here:
 ```mermaid
 flowchart LR
     Build["Build ../clab-ui/dist"]
-    WebLocal["containerlab-web: npm run dev:local"]
+    WebLocal["containerlab-app: npm run dev:web:local"]
     VscLocal["vscode-containerlab: npm run build:local-ui or package:local-ui"]
 
     Build --> WebLocal
@@ -78,7 +78,7 @@ The key rule is simple: if you changed `clab-ui`, rebuild it before expecting th
 
 | Flow | Typical failure | First place to inspect |
 |---|---|---|
-| Browser UI -> web host | wrong endpoint session or route mismatch | `containerlab-web/server/*.ts` |
-| Web host -> API server | auth header, route, or query mismatch | `containerlab-web/server/clabApiClient.ts`, `clab-api-server/internal/api/routes.go` |
+| Browser UI -> web host | wrong endpoint session or route mismatch | `containerlab-app/packages/app-server/src/*.ts` |
+| Web host -> API server | auth header, route, or query mismatch | `containerlab-app/packages/app-server/src/clabApiClient.ts`, `clab-api-server/internal/api/routes.go` |
 | API server -> runtime | privilege or ownership failure | `clab-api-server/internal/api/*.go` |
 | Webview -> extension host | message or command mapping drift | `vscode-containerlab/src/reactTopoViewer/extension/panel/MessageRouter.ts` |

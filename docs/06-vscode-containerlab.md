@@ -59,7 +59,7 @@ npm run package:local-ui
 ## How this differs from the browser host
 
 !!! info "Do not mentally model this as the web app inside VS Code"
-    The VS Code path does not require the `containerlab-web` gateway. It uses extension APIs, VS Code commands, and local services instead of browser cookies, HTTP proxy routes, and server-managed endpoint sessions.
+    The VS Code path does not require the `containerlab-app` gateway. It uses extension APIs, VS Code commands, and local services instead of browser cookies, HTTP proxy routes, and server-managed endpoint sessions.
 
 ## Operational prerequisites
 

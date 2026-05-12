@@ -1,6 +1,6 @@
 # 3. clab-ui Package
 
-`clab-ui` is the shared, publishable package consumed by `containerlab-web` and `vscode-containerlab`.
+`clab-ui` is the shared, publishable package consumed by `containerlab-app` and `vscode-containerlab`.
 
 ## What `clab-ui` owns
 
@@ -105,5 +105,5 @@ npm run build
 
 After that:
 
-- `containerlab-web` can use `npm run dev:local`
+- `containerlab-app` can use `npm run dev:web:local`
 - `vscode-containerlab` can use `npm run build:local-ui` or `npm run package:local-ui`

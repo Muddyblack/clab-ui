@@ -6,7 +6,7 @@ This is the fastest full-system explanation of how the four repos fit together, 
 
 !!! abstract "What actually happens"
     - `clab-ui` is the reusable UI package.
-    - `containerlab-web` hosts that package in the browser and forwards privileged work to `clab-api-server`.
+    - `containerlab-app` hosts that package in the browser and forwards privileged work to `clab-api-server`.
     - `vscode-containerlab` hosts the same package inside VS Code webviews and routes work through extension commands and services.
     - `clab-api-server` is the runtime authority for browser-hosted flows.
 
@@ -15,7 +15,7 @@ This is the fastest full-system explanation of how the four repos fit together, 
 | Component | Primary role | Typical consumer-facing surface |
 |---|---|---|
 | `clab-ui` | Shared package and contracts | `@srl-labs/clab-ui` exports |
-| `containerlab-web` | Browser SPA host, endpoint-session manager, gateway | `/auth/*`, `/files`, `/api/*` |
+| `containerlab-app` | Browser SPA host, endpoint-session manager, gateway | `/auth/*`, `/files`, `/api/*` |
 | `clab-api-server` | Authenticated control plane and runtime access | `/login`, `/api/v1/*` |
 | `vscode-containerlab` | Extension host and webview bridge | VS Code commands, `postMessage` bridge |
 
@@ -26,7 +26,7 @@ flowchart LR
     Browser["Browser user"]
     VSCode["VS Code user"]
     UI["@srl-labs/clab-ui"]
-    WebHost["containerlab-web"]
+    WebHost["containerlab-app"]
     Extension["vscode-containerlab"]
     API["clab-api-server"]
     Runtime["Container runtime and containerlab"]
@@ -51,7 +51,7 @@ Important boundary rules:
 
 | Dimension | Browser-hosted path | VS Code-hosted path |
 |---|---|---|
-| Host repo | `containerlab-web` | `vscode-containerlab` |
+| Host repo | `containerlab-app` | `vscode-containerlab` |
 | Transport | HTTP, SSE, websocket, browser cookies | VS Code `postMessage`, command dispatch |
 | Runtime owner | `clab-api-server` | extension services and local runtime integration |
 | Auth gate | endpoint session + JWT | extension activation and local environment checks |
@@ -62,7 +62,7 @@ Important boundary rules:
 ```mermaid
 sequenceDiagram
   participant B as Browser
-  participant W as containerlab-web
+  participant W as containerlab-app
   participant A as clab-api-server
   participant R as Runtime
 
@@ -99,8 +99,8 @@ sequenceDiagram
 |---|---|---|
 | Export map for `@srl-labs/clab-ui/*` | `clab-ui` | web and VS Code hosts |
 | `ClabUiHost` and topology session semantics | `clab-ui` | host implementations |
-| Browser-facing gateway routes | `containerlab-web` | browser app code and `clab-ui` API host usage |
-| `/api/v1/*` semantics | `clab-api-server` | `containerlab-web` |
+| Browser-facing gateway routes | `containerlab-app` | browser app code and `clab-ui` API host usage |
+| `/api/v1/*` semantics | `clab-api-server` | `containerlab-app` |
 | Extension commands and bridge message handling | `vscode-containerlab` | `clab-ui` webviews |
 
 ## Highest-risk coupling points
@@ -109,8 +109,8 @@ sequenceDiagram
 |---|---|---|
 | Export drift | consumer imports a subpath that is no longer exported | `clab-ui/package.json`, consumer imports |
 | Host contract drift | required host methods are missing or partially implemented | `clab-ui/src/host/contracts.ts`, host implementation |
-| Route mapping drift | browser-facing route no longer matches API upstream behavior | `containerlab-web/server/*.ts` |
-| Endpoint or topology session drift | wrong endpoint or stale topology session selected | `containerlab-web/server/middleware.ts`, `topologySessionManager.ts` |
+| Route mapping drift | browser-facing route no longer matches API upstream behavior | `containerlab-app/packages/app-server/src/*.ts` |
+| Endpoint or topology session drift | wrong endpoint or stale topology session selected | `containerlab-app/packages/app-server/src/middleware.ts`, `topologySessionManager.ts` |
 | Extension command drift | webview sends a command with no matching handler | `vscode-containerlab/src/extension.ts`, `MessageRouter.ts` |
 
 ## Auth and ownership pipeline
@@ -149,7 +149,7 @@ The local sibling-repo flow is strict on purpose.
 
 ```mermaid
 flowchart LR
-    Build["Build clab-ui dist"] --> WebLocal["containerlab-web: npm run dev:local"]
+    Build["Build clab-ui dist"] --> WebLocal["containerlab-app: npm run dev:web:local"]
     Build --> VscLocal["vscode-containerlab: npm run build:local-ui or package:local-ui"]
 ```
 
@@ -160,7 +160,7 @@ flowchart LR
 | Package version | `clab-ui/package.json` |
 | Release trigger | tag `vX.Y.Z` matching package version |
 | Publish workflow | `clab-ui/.github/workflows/publish-package.yml` |
-| Consumer adoption | dependency bump in `containerlab-web` and `vscode-containerlab` |
+| Consumer adoption | dependency bump in `containerlab-app` and `vscode-containerlab` |
 
 ## Quick operator commands
 
@@ -170,8 +170,8 @@ cd /home/flschwar/projects/clab/clab-ui
 npm run build
 
 # Run the browser host against the local shared package
-cd /home/flschwar/projects/clab/containerlab-web
-npm run dev:local
+cd /home/flschwar/projects/clab/containerlab-app
+npm run dev:web:local
 
 # Build the VS Code extension against the local shared package
 cd /home/flschwar/projects/clab/vscode-containerlab

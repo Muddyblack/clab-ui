@@ -16,12 +16,12 @@ npm install
 npm run build
 ```
 
-### Step 2A: run `containerlab-web` against the local package
+### Step 2A: run `containerlab-app` against the local package
 
 ```bash
-cd /home/flschwar/projects/clab/containerlab-web
+cd /home/flschwar/projects/clab/containerlab-app
 npm install
-npm run dev:local
+npm run dev:web:local
 ```
 
 `dev:local` already enables local-ui mode and fails early if `../clab-ui/dist` is missing.
@@ -58,14 +58,14 @@ Use the published package flow when you want to test the same artifact other rep
 3. Create a matching tag `vX.Y.Z`.
 4. Push the tag.
 5. Let `.github/workflows/publish-package.yml` publish the package.
-6. Bump dependencies in `containerlab-web` and `vscode-containerlab`.
+6. Bump dependencies in `containerlab-app` and `vscode-containerlab`.
 
 ## Environment variables you are likely to touch
 
 | Variable | Used in | Purpose |
 |---|---|---|
 | `CLAB_UI_SOURCE=local` | local consumer builds | switch imports from published package to sibling `../clab-ui/dist` |
-| `CLAB_API_URL` | `containerlab-web` server | default API endpoint offered by the browser host |
+| `CLAB_API_URL` | `containerlab-app` server | default API endpoint offered by the browser host |
 | `GITHUB_TOKEN` | local npm install flows | GitHub Packages authentication |
 | `NODE_AUTH_TOKEN` | publish workflow | package publish authentication |
 | `JWT_SECRET` | `clab-api-server` | secure JWT signing |
@@ -81,7 +81,7 @@ Use the published package flow when you want to test the same artifact other rep
 
 ```bash
 cd /home/flschwar/projects/clab/clab-ui && npm run build && npm run lint && npm run test:unit
-cd /home/flschwar/projects/clab/containerlab-web && npm run build && npm run test:unit
+cd /home/flschwar/projects/clab/containerlab-app && npm run build && npm run test:unit
 cd /home/flschwar/projects/clab/vscode-containerlab && npm run lint && npm test
 cd /home/flschwar/projects/clab/clab-api-server && task && task test
 ```

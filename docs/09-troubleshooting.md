@@ -6,10 +6,10 @@ Use this page for first-pass triage before diving into the deeper route and cont
 
 | Symptom | Likely cause | First place to inspect |
 |---|---|---|
-| Browser UI loads but runtime actions fail | web gateway route or endpoint-session mismatch | `containerlab-web/server/*.ts`, especially `middleware.ts` and `runtimeProxy.ts` |
-| Browser requests return auth or CORS errors | missing endpoint session, invalid bearer token, or CORS mismatch | `containerlab-web/server/auth.ts`, `clab-api-server/internal/api/middleware.go` |
+| Browser UI loads but runtime actions fail | web gateway route or endpoint-session mismatch | `containerlab-app/packages/app-server/src/*.ts`, especially `middleware.ts` and `runtimeProxy.ts` |
+| Browser requests return auth or CORS errors | missing endpoint session, invalid bearer token, or CORS mismatch | `containerlab-app/packages/app-server/src/auth.ts`, `clab-api-server/internal/api/middleware.go` |
 | API returns `404` for a resource that "should" exist | ownership concealment or stale topology reference | `clab-api-server/internal/api/helpers.go`, web topology/session state |
-| Terminal or VNC closes immediately | stale runtime session or capture-session mapping | `containerlab-web/server/terminalStreamProxy.ts`, `captureVncStreamProxy.ts` |
+| Terminal or VNC closes immediately | stale runtime session or capture-session mapping | `containerlab-app/packages/app-server/src/terminalStreamProxy.ts`, `captureVncStreamProxy.ts` |
 | VS Code webview action does nothing | message router or command mapping drift | `vscode-containerlab/src/reactTopoViewer/extension/panel/MessageRouter.ts`, `src/extension.ts` |
 | Local `clab-ui` change does not show up in a consumer | stale `dist/` or consumer not using local-ui mode | rebuild `clab-ui`, then restart the consumer |
 
@@ -24,8 +24,8 @@ Use this page for first-pass triage before diving into the deeper route and cont
 ## Quick checks for the browser host
 
 ```bash
-cd /home/flschwar/projects/clab/containerlab-web
-npm run dev
+cd /home/flschwar/projects/clab/containerlab-app
+npm run dev:web
 ```
 
 Then verify:
@@ -45,8 +45,8 @@ npm run build
 Then restart the relevant consumer:
 
 ```bash
-cd /home/flschwar/projects/clab/containerlab-web
-npm run dev:local
+cd /home/flschwar/projects/clab/containerlab-app
+npm run dev:web:local
 
 cd /home/flschwar/projects/clab/vscode-containerlab
 npm run build:local-ui

@@ -228,7 +228,7 @@ Use this for:
 
 Reference consumer:
 
-- [containerlab-web/src/main.tsx](/home/flschwar/projects/clab/containerlab-web/src/main.tsx)
+- [containerlab-app/packages/standalone-runtime/src/standaloneApp.tsx](/home/flschwar/projects/clab/containerlab-app/packages/standalone-runtime/src/standaloneApp.tsx)
 
 Important: `createApiClabUiHost` only handles the topology request/command
 transport. Your app still has to create and destroy topology sessions.

@@ -8,14 +8,14 @@ This is the cross-repo failure map for the breakages that show up most often dur
 |---|---|---|---|---|
 | API login rejection | bad credentials or missing required group | login fails, no token issued | API login path and Linux group membership | fix credentials or group membership, then log in again |
 | JWT validation failure | expired token or secret mismatch | `401` across `/api/v1/*` | API auth middleware and token age | log in again and verify server config |
-| browser endpoint session expired | saved endpoint token no longer works | browser routes return `401` even though the UI looks "logged in" | `containerlab-web` endpoint status and `/auth/me` | reconnect the endpoint or log in again |
+| browser endpoint session expired | saved endpoint token no longer works | browser routes return `401` even though the UI looks "logged in" | `containerlab-app` endpoint status and `/auth/me` | reconnect the endpoint or log in again |
 | extension activation blocked | local user lacks required groups or runtime access | extension does not initialize fully | `vscode-containerlab` activation checks and Docker access | fix local group membership and runtime access |
 
 ## Routing and session failures
 
 | Failure mode | Trigger | Symptom | First check | Remediation |
 |---|---|---|---|---|
-| web route mismatch | browser-facing route and upstream mapping drifted | `404`, `405`, or unexpected response shape | `containerlab-web/server/*.ts` | align the browser route with the intended upstream behavior |
+| web route mismatch | browser-facing route and upstream mapping drifted | `404`, `405`, or unexpected response shape | `containerlab-app/packages/app-server/src/*.ts` | align the browser route with the intended upstream behavior |
 | stale topology session | topology session id outlived the current context | snapshot or command route returns `404` | `topologySessionManager.ts` and active browser session state | recreate the topology session |
 | wrong endpoint selected | browser session has multiple endpoints and the wrong one is chosen | requests hit the wrong lab inventory or return confusing auth failures | endpoint-selection logic in `middleware.ts` and request target data | choose the intended endpoint explicitly or clean up stale endpoints |
 | capture-session mapping drift | capture session no longer maps to the endpoint that created it | VNC ready, close, or websocket paths fail unexpectedly | `captureSessionStore.ts` and capture proxy code | recreate the capture session |
@@ -43,7 +43,7 @@ This is the cross-repo failure map for the breakages that show up most often dur
 |---|---|---|---|---|
 | consumer imports repo internals | package update removes or moves an internal file | compile-time or runtime import breakage | consumer import graph | migrate to public package exports |
 | host contract drift | package expects host methods the consumer does not implement | semantic UI actions no-op or throw | `clab-ui` host contract versus host implementation | implement the missing host behavior |
-| web route drift | browser helper expects old route or payload shape | browser-only runtime regressions | `containerlab-web/src/runtimeApi.ts` and `server/*.ts` | realign browser helper and server proxy |
+| web route drift | browser helper expects old route or payload shape | browser-only runtime regressions | `containerlab-app/packages/standalone-runtime/src/runtimeApi.ts` and `packages/app-server/src/*.ts` | realign browser helper and server proxy |
 | VS Code message drift | webview emits messages with no handler or wrong payload | VS Code-only regressions | `MessageRouter.ts` and feature webview code | realign message names and payloads |
 
 ## Ownership and permission failures
@@ -74,11 +74,11 @@ flowchart LR
 
 | Area | File or hotspot |
 |---|---|
-| web auth and endpoint sessions | `containerlab-web/server/auth.ts`, `server/middleware.ts` |
-| web topology session logic | `containerlab-web/server/topologyProxy.ts`, `server/topologySessionManager.ts` |
-| web runtime and capture proxies | `containerlab-web/server/runtimeProxy.ts` |
-| terminal websocket proxy | `containerlab-web/server/terminalStreamProxy.ts` |
-| VNC websocket proxy | `containerlab-web/server/captureVncStreamProxy.ts` |
+| web auth and endpoint sessions | `containerlab-app/packages/app-server/src/auth.ts`, `packages/app-server/src/middleware.ts` |
+| web topology session logic | `containerlab-app/packages/app-server/src/topologyProxy.ts`, `packages/app-server/src/topologySessionManager.ts` |
+| web runtime and capture proxies | `containerlab-app/packages/app-server/src/runtimeProxy.ts` |
+| terminal websocket proxy | `containerlab-app/packages/app-server/src/terminalStreamProxy.ts` |
+| VNC websocket proxy | `containerlab-app/packages/app-server/src/captureVncStreamProxy.ts` |
 | API auth and ownership | `clab-api-server/internal/api/middleware.go`, `helpers.go` |
 | API lab and capture handlers | `clab-api-server/internal/api/lab_handlers.go`, `capture_handlers.go` |
 | VS Code activation | `vscode-containerlab/src/extension.ts` |

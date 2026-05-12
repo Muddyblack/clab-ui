@@ -7,7 +7,7 @@ This page describes the intended architecture before getting into route tables a
 The platform is split so the reusable UI stays reusable:
 
 - `clab-ui` is a publishable package, not an app-specific repo.
-- `containerlab-web` is the browser host and gateway.
+- `containerlab-app` is the browser host and gateway.
 - `clab-api-server` is the authenticated runtime authority for web-hosted flows.
 - `vscode-containerlab` is the local extension host for VS Code-hosted flows.
 
@@ -19,7 +19,7 @@ That separation is what allows the same topology UI to run in both a browser pro
 
 ```mermaid
 flowchart LR
-    Browser["Browser"] --> WebHost["containerlab-web"]
+    Browser["Browser"] --> WebHost["containerlab-app"]
     WebHost --> APIServer["clab-api-server"]
     APIServer --> Runtime["Container runtime and containerlab"]
 ```
@@ -39,7 +39,7 @@ flowchart LR
 |---|---|---|
 | UI rendering, topology UX, inspect and feature views | `clab-ui` | shared across both hosts |
 | Authenticated API and runtime policy | `clab-api-server` | browser flows need a server-side authority |
-| Browser session handling and proxying | `containerlab-web` | browser code cannot safely own privileged runtime access |
+| Browser session handling and proxying | `containerlab-app` | browser code cannot safely own privileged runtime access |
 | VS Code command execution and file access | `vscode-containerlab` | extension APIs and local environment live there |
 
 ## What should remain stable
@@ -51,7 +51,7 @@ The contracts that need careful versioning are:
 
 - `clab-ui/package.json` exports
 - `ClabUiHost` and topology session behavior
-- Browser-facing route semantics in `containerlab-web`
+- Browser-facing route semantics in `containerlab-app`
 - `/api/v1/*` semantics in `clab-api-server`
 - VS Code command and message contracts used by the webviews
 

@@ -1,6 +1,6 @@
 # clab-ui Platform Guide
 
-This guide explains how `clab-ui`, `containerlab-web`, `clab-api-server`, and `vscode-containerlab` work together as one platform. It is written for maintainers and integrators who need to understand ownership boundaries, integration contracts, and failure modes.
+This guide explains how `clab-ui`, `containerlab-app`, `clab-api-server`, and `vscode-containerlab` work together as one platform. It is written for maintainers and integrators who need to understand ownership boundaries, integration contracts, and failure modes.
 
 !!! info "Good starting points"
     - Want the shortest useful full-system orientation? Start with [0. Platform Deep Dive](00-platform-deep-dive.md).
@@ -31,7 +31,7 @@ This guide explains how `clab-ui`, `containerlab-web`, `clab-api-server`, and `v
 
 ### Debugging web-hosted runtime behavior
 
-1. [5. containerlab-web](05-containerlab-web.md)
+1. [5. containerlab-app](05-containerlab-app.md)
 2. [11. Web Route and Proxy Matrix](11-web-route-and-proxy-matrix.md)
 3. [12. API Endpoint Taxonomy](12-api-endpoint-taxonomy.md)
 4. [15. Failure Mode Atlas](15-failure-mode-atlas.md)
@@ -49,7 +49,7 @@ This guide explains how `clab-ui`, `containerlab-web`, `clab-api-server`, and `v
 flowchart LR
     U1["Browser user"]
     U2["VS Code user"]
-    WEB["containerlab-web\nSPA host and Fastify gateway"]
+    WEB["containerlab-app\nSPA host and Fastify gateway"]
     VSC["vscode-containerlab\nExtension host and webviews"]
     UI["@srl-labs/clab-ui\nShared package"]
     API["clab-api-server\nAuthenticated API v1"]
@@ -69,7 +69,7 @@ flowchart LR
 | Layer | Owns | Does not own |
 |---|---|---|
 | `clab-ui` | Shared UI, topology host contracts, session client, feature bootstrappers | Container runtime access, Linux auth, API policy |
-| `containerlab-web` | Browser hosting, endpoint sessions, topology sessions, API proxying, stream/websocket forwarding | Runtime authority, Linux user management |
+| `containerlab-app` | Browser hosting, endpoint sessions, topology sessions, API proxying, stream/websocket forwarding | Runtime authority, Linux user management |
 | `clab-api-server` | JWT auth, Linux-group authorization, ownership checks, runtime operations, file-scoped topology APIs | Browser hosting, VS Code webviews |
 | `vscode-containerlab` | VS Code command bridge, panel lifecycle, file I/O, local CLI-driven workflows | Central browser gateway role |
 
@@ -77,7 +77,7 @@ flowchart LR
 
 - The `@srl-labs/clab-ui` export map in `clab-ui/package.json`
 - The `ClabUiHost` and topology session contracts in `@srl-labs/clab-ui/host` and `@srl-labs/clab-ui/session`
-- The browser-facing route surface implemented by `containerlab-web`
+- The browser-facing route surface implemented by `containerlab-app`
 - The `/api/v1/*` semantics exposed by `clab-api-server`
 - The VS Code command and message bridge implemented by `vscode-containerlab`
 
@@ -91,6 +91,6 @@ flowchart LR
 ## Source anchors for this guide
 
 - `clab-ui/README.md`, `clab-ui/INTEGRATORS.md`, `clab-ui/package.json`
-- `containerlab-web/server/index.ts`, `containerlab-web/server/*.ts`, `containerlab-web/src/*.ts`
+- `containerlab-app/packages/app-server/src/index.ts`, `containerlab-app/packages/app-server/src/*.ts`, `containerlab-app/packages/standalone-runtime/src/*.ts`
 - `clab-api-server/cmd/server/main.go`, `clab-api-server/internal/api/*.go`
 - `vscode-containerlab/src/extension.ts`, `vscode-containerlab/src/reactTopoViewer/extension/*`, `vscode-containerlab/esbuild.config.js`

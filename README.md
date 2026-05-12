@@ -5,7 +5,7 @@ Shared UI package for containerlab webviews and topology editing.
 Consumers:
 
 - [`vscode-containerlab`](https://github.com/srl-labs/vscode-containerlab)
-- [`containerlab-web`](https://github.com/srl-labs/containerlab-web)
+- [`containerlab-app`](https://github.com/srl-labs/containerlab-app)
 
 ## What This Repo Contains
 
@@ -14,7 +14,7 @@ Consumers:
 - Package build tooling that emits the published `dist/` output
 
 This repository no longer contains the standalone browser host. That runtime
-now lives in `containerlab-web`.
+now lives in `containerlab-app`.
 
 ## Requirements
 
