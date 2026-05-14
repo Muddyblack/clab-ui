@@ -1,5 +1,6 @@
 // Types for React Flow canvas components.
 import type { Node, Edge, ReactFlowInstance } from "@xyflow/react";
+import type { LayoutName } from "../../components/canvas/layout/types";
 
 import type {
   NetworkNodeData,
@@ -52,7 +53,7 @@ export type TopologyRFEdge = TopoEdge;
  */
 export interface ReactFlowCanvasRef {
   fit: () => void;
-  runLayout: (layoutName: string) => void;
+  applyLayout: (layoutName: string) => void;
   getReactFlowInstance: () => ReactFlowInstance | null;
   /** Get current nodes (for undo/redo) */
   getNodes: () => Node[];
@@ -171,7 +172,7 @@ export interface ReactFlowCanvasProps {
   /** Whether the left ContextPanel (palette) is currently open */
   isContextPanelOpen?: boolean;
   /** Current layout (used for geo layout transitions) */
-  layout?: "preset" | "force" | "geo";
+  layout?: LayoutName;
   /** Geo layout active */
   isGeoLayout?: boolean;
   /** Grid line thickness for the background */
@@ -230,6 +231,8 @@ export interface ReactFlowCanvasProps {
   onDropCreateNode?: (position: { x: number; y: number }, templateName: string) => void;
   /** Callback for drag-drop network creation from palette */
   onDropCreateNetwork?: (position: { x: number; y: number }, networkType: string) => void;
+  /** Called after a topology/network node position is manually committed. */
+  onTopologyNodePositionCommit?: () => void;
   /** Callback when a locked action is attempted */
   onLockedAction?: () => void;
 }
