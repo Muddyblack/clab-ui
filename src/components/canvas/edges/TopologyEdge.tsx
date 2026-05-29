@@ -13,7 +13,8 @@ import {
   calculateControlPoint,
   getEdgePoints,
   getLabelPosition,
-  getNodeIntersection
+  getNodeIntersection,
+  isVisuallyCanonicalDirection
 } from "../edgeGeometry";
 import { DEFAULT_ENDPOINT_LABEL_OFFSET } from "../../../annotations/endpointLabelOffset";
 import {
@@ -888,7 +889,11 @@ function computeRegularGeometry(
 
   const index = parallelInfo?.index ?? 0;
   const total = parallelInfo?.total ?? 1;
-  const isCanonicalDirection = parallelInfo?.isCanonicalDirection ?? true;
+  const hasTelemetryInterfaceAnchors =
+    nodeProximateLabels && sourceAnchor !== undefined && targetAnchor !== undefined;
+  const isCanonicalDirection = hasTelemetryInterfaceAnchors
+    ? isVisuallyCanonicalDirection(points.sx, points.sy, points.tx, points.ty)
+    : (parallelInfo?.isCanonicalDirection ?? true);
 
   const controlPoint = calculateControlPoint(
     points.sx,

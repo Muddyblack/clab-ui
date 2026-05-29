@@ -120,6 +120,31 @@ export function getLabelPosition(
 }
 
 /**
+ * Resolve a visual direction for edge rendering.
+ *
+ * Parallel edge grouping uses a stable node-id direction for generic edges. When
+ * endpoints are anchored to visible interface labels, the curve order needs to
+ * follow the rendered geometry instead. In SVG coordinates, the first sorted
+ * horizontal label bends upward on left-to-right links, while the first sorted
+ * vertical label bends leftward on bottom-to-top links.
+ */
+export function isVisuallyCanonicalDirection(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number
+): boolean {
+  const dx = tx - sx;
+  const dy = ty - sy;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0;
+  }
+
+  return dy <= 0;
+}
+
+/**
  * Calculate the bezier control point for a curved edge.
  */
 export function calculateControlPoint(
