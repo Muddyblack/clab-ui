@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -32,11 +35,10 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
-      - name: Install pinned Chrome
+      - name: Install Chrome
         id: setup-chrome
         uses: browser-actions/setup-chrome@v2
         with:
-          chrome-version: 148.0.7778.167
           install-dependencies: true
 
       - name: Verify Chrome version
