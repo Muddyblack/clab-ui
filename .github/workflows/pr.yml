@@ -32,10 +32,20 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: Install pinned Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: 148.0.7778.167
+          install-dependencies: true
+
+      - name: Verify Chrome version
+        run: |
+          "${{ steps.setup-chrome.outputs.chrome-path }}" --version
 
       - name: Browser harness tests
+        env:
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: npm run test:browser
 
       - name: Upload Playwright report
