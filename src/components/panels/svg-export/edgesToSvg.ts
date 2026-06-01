@@ -5,7 +5,8 @@ import {
   getEdgePoints,
   calculateControlPoint,
   getLabelPosition,
-  getNodeIntersection
+  getNodeIntersection,
+  isVisuallyCanonicalDirection
 } from "../../canvas/edgeGeometry";
 
 import {
@@ -741,8 +742,12 @@ function resolveRegularEdgeAnchors(
 
 function buildRegularEdgePath(
   points: { sx: number; sy: number; tx: number; ty: number },
-  parallelInfo: { index: number; total: number; isCanonicalDirection: boolean } | undefined
+  parallelInfo: { index: number; total: number; isCanonicalDirection: boolean } | undefined,
+  useVisualDirection: boolean
 ): { path: string; controlPoint: { x: number; y: number } | null } {
+  const isCanonicalDirection = useVisualDirection
+    ? isVisuallyCanonicalDirection(points.sx, points.sy, points.tx, points.ty)
+    : (parallelInfo?.isCanonicalDirection ?? true);
   const controlPoint = calculateControlPoint(
     points.sx,
     points.sy,
@@ -750,7 +755,7 @@ function buildRegularEdgePath(
     points.ty,
     parallelInfo?.index ?? 0,
     parallelInfo?.total ?? 1,
-    parallelInfo?.isCanonicalDirection ?? true,
+    isCanonicalDirection,
     CONTROL_POINT_STEP_SIZE
   );
   const path = controlPoint
@@ -777,7 +782,11 @@ function renderRegularEdge(
     sourceAnchor,
     targetAnchor
   );
-  const { path, controlPoint } = buildRegularEdgePath(points, parallelInfo);
+  const { path, controlPoint } = buildRegularEdgePath(
+    points,
+    parallelInfo,
+    ctx.nodeProximateLabels && sourceAnchor !== undefined && targetAnchor !== undefined
+  );
 
   let svg = `<g class="export-edge" data-id="${escapeXml(ctx.edgeId)}">`;
   svg += `<path d="${path}" fill="none" stroke="${ctx.strokeColor}" `;
