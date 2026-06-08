@@ -174,6 +174,7 @@ export function createExplorerController(options: ExplorerControllerOptions): Ex
   let snapshotInFlight = false;
   let snapshotPending = false;
   let actionBindings = new Map<string, ExplorerActionInvocation>();
+  let prevActionBindings = new Map<string, ExplorerActionInvocation>();
 
   const publish = async (message: ExplorerIncomingMessage): Promise<void> => {
     if (!connected) {
@@ -208,9 +209,11 @@ export function createExplorerController(options: ExplorerControllerOptions): Ex
         filterText,
         snapshotOptions
       );
+      prevActionBindings = actionBindings;
       actionBindings = nextBindings;
       await publish(snapshot);
     } catch (error: unknown) {
+      prevActionBindings = new Map();
       actionBindings = new Map();
       const message = error instanceof Error ? error.message : String(error);
       await publishError(`Explorer refresh failed: ${message}`);
@@ -272,7 +275,7 @@ export function createExplorerController(options: ExplorerControllerOptions): Ex
     },
 
     async invokeAction(actionRef: string): Promise<void> {
-      const binding = actionBindings.get(actionRef);
+      const binding = actionBindings.get(actionRef) ?? prevActionBindings.get(actionRef);
       if (!binding) {
         await publishError("Action is no longer available. Refresh and try again.");
         return;
