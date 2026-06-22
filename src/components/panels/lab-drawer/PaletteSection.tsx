@@ -269,7 +269,6 @@ type AnnotationPayload = {
 function setCanvasDragPayload(event: React.DragEvent, payload: CanvasDragPayload): void {
   const serialized = JSON.stringify(payload);
   event.dataTransfer.setData(REACTFLOW_NODE_MIME_TYPE, serialized);
-  event.dataTransfer.setData("text/plain", serialized);
   event.dataTransfer.effectAllowed = "move";
   (window as CanvasDragWindow)[CANVAS_DRAG_FALLBACK_KEY] = {
     payload,
